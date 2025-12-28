@@ -248,14 +248,8 @@ selectedColumns.forEach((colId) => {
       (sum, row) => sum + (Number(row[colId]) || 0),
       0
     );
-    // format similar to your per-row logic
-    if (["salary", "food_allow", "allowances_earned", "dues_earned", "deductions", "gross_salary"].includes(colId)) {
-      totalRow[label] = total.toFixed(2);
-    } else if (colId === "total_earnings") {
-      totalRow[label] = Math.round(total);
-    } else {
-      totalRow[label] = total;
-    }
+    // Round all totals to whole numbers (no decimals)
+    totalRow[label] = Math.round(total);
   } else if (label !== firstSelectedLabel) {
     totalRow[label] = "";
   }
