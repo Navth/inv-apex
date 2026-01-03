@@ -28,7 +28,7 @@ interface PayrollRow {
   gross_salary: number;
   deductions: number;
   net_salary: number;
-  comment?: string;
+  comments?: string;
   days_worked?: number;
 }
 
@@ -53,7 +53,7 @@ export default function PayrollTable({ data, onSave, onApprove }: PayrollTablePr
 
   // Allow editing deductions and food_allowance, recalculate net salary on changes
   const updateCell = (rowIndex: number, field: keyof PayrollRow, value: any) => {
-    if (field !== "deductions" && field !== "food_allowance" && field !== "comment") return;
+    if (field !== "deductions" && field !== "food_allowance" && field !== "comments") return;
 
     setPayrollData((prev) => {
       const newData = [...prev];
@@ -66,7 +66,7 @@ export default function PayrollTable({ data, onSave, onApprove }: PayrollTablePr
       } else if (field === "food_allowance") {
         updated.food_allowance = numericValue;
       } else {
-        updated.comment = String(value);
+        updated.comments = String(value);
       }
 
       // Recalculate net salary = gross_salary - deductions, update gross_salary if food_allowance changed
@@ -92,6 +92,7 @@ const handleSave = () => {
     gross_salary: toNumber(row.gross_salary),
     deductions: toNumber(row.deductions),
     net_salary: toNumber(row.net_salary),
+    comments: row.comments || "",
   }));
 
   onSave(normalized);
@@ -198,10 +199,10 @@ const handleSave = () => {
 
                 {/* Comments */}
                 <TableCell>
-                  {editingCell?.rowIndex === rowIndex && editingCell.field === "comment" ? (
+                  {editingCell?.rowIndex === rowIndex && editingCell.field === "comments" ? (
                     <Textarea
-                      value={row.comment ?? ""}
-                      onChange={(e) => updateCell(rowIndex, "comment", e.target.value)}
+                      value={row.comments ?? ""}
+                      onChange={(e) => updateCell(rowIndex, "comments", e.target.value)}
                       onBlur={() => setEditingCell(null)}
                       autoFocus
                       className="min-h-16 text-sm"
@@ -209,10 +210,10 @@ const handleSave = () => {
                   ) : (
                     <div
                       className="cursor-pointer hover-elevate active-elevate-2 px-2 py-1 rounded min-h-8 flex items-center gap-2"
-                      onClick={() => setEditingCell({ rowIndex, field: "comment" })}
+                      onClick={() => setEditingCell({ rowIndex, field: "comments" })}
                     >
                       <span className="text-sm flex-1 text-muted-foreground">
-                        {row.comment || "Add comment..."}
+                        {row.comments || "Add comment..."}
                       </span>
                       <Pencil className="h-3 w-3 text-muted-foreground" />
                     </div>

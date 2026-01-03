@@ -276,7 +276,7 @@ function formatMonthLabel(monthStr: string) {
             gross_salary: row.gross_salary,
             deductions: row.deductions,
             net_salary: row.net_salary,
-            comment: row.comment,
+            comments: row.comments,
           }),
         });
 
@@ -309,14 +309,16 @@ function formatMonthLabel(monthStr: string) {
     // Generate Excel
     try {
       const exportData = data.map(row => ({
-        "Employee ID": row.emp_id,
+        "Emp ID": row.emp_id,
+        "Employee Name": row.name || "",
+        "Days Worked": Number(row.days_worked ?? 0),
         "Basic Salary": Number(row.basic_salary),
         "OT Amount": Number(row.ot_amount),
         "Food Allowance": Number(row.food_allowance),
-        "Days Worked": Number(row.days_worked ?? 0),
+        "Gross Salary": Number(row.gross_salary),
         "Deductions": Number(row.deductions),
         "Net Salary": Number(row.net_salary),
-        "Comments": row.comment || ""
+        "Comments": row.comments || ""
       }));
 
       const worksheet = XLSX.utils.json_to_sheet(exportData);
