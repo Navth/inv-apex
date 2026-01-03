@@ -247,16 +247,16 @@ excelData.push(totalRow);
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className=\"space-y-2\">
-              <Label htmlFor=\"report-year\" className=\"text-sm font-medium\">
+            <div className="space-y-2">
+              <Label htmlFor="report-year" className="text-sm font-medium">
                 Select Year
               </Label>
               <Select 
                 value={selectedYear.toString()} 
                 onValueChange={(val) => setSelectedYear(parseInt(val))}
               >
-                <SelectTrigger id=\"report-year\" className=\"h-10\">
-                  <SelectValue placeholder=\"Select year\" />
+                <SelectTrigger id="report-year" className="h-10">
+                  <SelectValue placeholder="Select year" />
                 </SelectTrigger>
                 <SelectContent>
                   {years.map((year) => (
@@ -294,7 +294,8 @@ excelData.push(totalRow);
             </div>
           </div>
 
-          <div className="space-y-2">\n            <Label htmlFor="format" className="text-sm font-medium">
+          <div className="space-y-2">
+            <Label htmlFor="format" className="text-sm font-medium">
                 Export Format
               </Label>
               <Select value={format} onValueChange={setFormat}>
