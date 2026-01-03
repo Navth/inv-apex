@@ -14,8 +14,20 @@ import { Download, FileSpreadsheet, FileText, RefreshCw } from "lucide-react";
 import * as XLSX from "xlsx";
 
 export default function Reports() {
-  const [selectedMonth, setSelectedMonth] = useState("");
-  const [months, setMonths] = useState<{ value: string; label: string }[]>([]);
+  const monthNames = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+  ];
+
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+
+  // Generate years: 5 years back and 5 years forward
+  const years = Array.from({ length: 11 }, (_, i) => currentYear - 5 + i);
+
+  const [selectedYear, setSelectedYear] = useState<number>(currentYear);
+  const [selectedMonthNum, setSelectedMonthNum] = useState<number>(currentMonth);
   const [format, setFormat] = useState("excel");
   const [selectedColumns, setSelectedColumns] = useState<string[]>([
     "emp_id",
@@ -35,104 +47,8 @@ export default function Reports() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function generateMonths() {
-      const monthNames = [
-        "January", "February", "March", "April", "May", "June",
-        "July", "August", "September", "October", "November", "December",
-      ];
-
-      try {
-        const [attendanceRes, payrollRes] = await Promise.all([
-          fetch("/api/attendance", { credentials: "include" }),
-          fetch("/api/payroll", { credentials: "include" })
-        ]);
-
-        const attendanceData = attendanceRes.ok ? await attendanceRes.json() : [];
-        const payrollData = payrollRes.ok ? await payrollRes.json() : [];
-
-        const allMonthsSet = new Set<string>();
-        attendanceData.forEach((record: any) => {
-          if (record.month) allMonthsSet.add(record.month);
-        });
-        payrollData.forEach((record: any) => {
-          if (record.month) allMonthsSet.add(record.month);
-        });
-
-        const existingMonths: { value: string; label: string; date: Date }[] = [];
-        allMonthsSet.forEach(monthStr => {
-          try {
-            const [mm, yyyy] = monthStr.split('-');
-            const date = new Date(parseInt(yyyy), parseInt(mm) - 1, 1);
-            const label = `${monthNames[date.getMonth()]} ${yyyy}`;
-            existingMonths.push({
-              value: `${mm.padStart(2, '0')}-${yyyy}`,
-              label,
-              date
-            });
-          } catch {}
-        });
-
-        const now = new Date();
-        const currentYear = now.getFullYear();
-        for (let month = 1; month <= 12; month++) {
-          const date = new Date(currentYear, month - 1, 1);
-          const mm = String(month).padStart(2, "0");
-          const yyyy = currentYear;
-          const value = `${mm}-${yyyy}`;
-          const label = `${monthNames[month - 1]} ${currentYear}`;
-
-          existingMonths.push({ value, label, date });
-        }
-
-        for (let i = 0; i <= 6; i++) {
-          const date = new Date(now.getFullYear(), now.getMonth() + i + 1, 1);
-          const mm = String(date.getMonth() + 1).padStart(2, "0");
-          const yyyy = date.getFullYear();
-          const value = `${mm}-${yyyy}`;
-          const label = `${monthNames[date.getMonth()]} ${yyyy}`;
-          existingMonths.push({ value, label, date });
-        }
-
-        const uniqueMonths = Array.from(
-          new Map(existingMonths.map(item => [item.value, item])).values()
-        );
-
-        uniqueMonths.sort((a, b) => b.date.getTime() - a.date.getTime());
-
-        const cleanMonths = uniqueMonths.map(({ value, label }) => ({ value, label }));
-        setMonths(cleanMonths);
-
-        const currentMonth = `${String(now.getMonth() + 1).padStart(2, "0")}-${now.getFullYear()}`;
-        setSelectedMonth(currentMonth);
-
-      } catch (error) {
-        console.error("Failed to fetch existing months:", error);
-        generateCurrentYearMonths();
-      }
-    }
-
-    function generateCurrentYearMonths() {
-      const monthNames = [
-        "January", "February", "March", "April", "May", "June",
-        "July", "August", "September", "October", "November", "December",
-      ];
-      const now = new Date();
-      const currentYear = now.getFullYear();
-      const allMonths: { value: string; label: string }[] = [];
-
-      for (let month = 1; month <= 12; month++) {
-        const mm = String(month).padStart(2, "0");
-        const value = `${mm}-${currentYear}`;
-        const label = `${monthNames[month - 1]} ${currentYear}`;
-        allMonths.push({ value, label });
-      }
-      setMonths(allMonths);
-      setSelectedMonth(`${String(now.getMonth() + 1).padStart(2, "0")}-${currentYear}`);
-    }
-
-    generateMonths();
-  }, []);
+  // Computed value for the combined month string (MM-YYYY format)
+  const selectedMonth = `${String(selectedMonthNum).padStart(2, "0")}-${selectedYear}`;
 
   useEffect(() => {
     if (!selectedMonth) return;
@@ -331,11 +247,35 @@ excelData.push(totalRow);
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className=\"space-y-2\">
+              <Label htmlFor=\"report-year\" className=\"text-sm font-medium\">
+                Select Year
+              </Label>
+              <Select 
+                value={selectedYear.toString()} 
+                onValueChange={(val) => setSelectedYear(parseInt(val))}
+              >
+                <SelectTrigger id=\"report-year\" className=\"h-10\">
+                  <SelectValue placeholder=\"Select year\" />
+                </SelectTrigger>
+                <SelectContent>
+                  {years.map((year) => (
+                    <SelectItem key={year} value={year.toString()}>
+                      {year}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="report-month" className="text-sm font-medium">
                 Select Month
               </Label>
-              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+              <Select 
+                value={selectedMonthNum.toString()} 
+                onValueChange={(val) => setSelectedMonthNum(parseInt(val))}
+              >
                 <SelectTrigger
                   id="report-month"
                   className="h-10"
@@ -344,17 +284,17 @@ excelData.push(totalRow);
                   <SelectValue placeholder="Select month" />
                 </SelectTrigger>
                 <SelectContent>
-                  {months.map((month) => (
-                    <SelectItem key={month.value} value={month.value}>
-                      {month.label}
+                  {monthNames.map((monthName, index) => (
+                    <SelectItem key={index + 1} value={(index + 1).toString()}>
+                      {monthName}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+          </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="format" className="text-sm font-medium">
+          <div className="space-y-2">\n            <Label htmlFor="format" className="text-sm font-medium">
                 Export Format
               </Label>
               <Select value={format} onValueChange={setFormat}>
