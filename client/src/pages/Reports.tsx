@@ -50,6 +50,13 @@ export default function Reports() {
   // Computed value for the combined month string (MM-YYYY format)
   const selectedMonth = `${String(selectedMonthNum).padStart(2, "0")}-${selectedYear}`;
 
+  function formatMonthLabel(monthStr: string) {
+    if (!monthStr) return "";
+    const [mm, yyyy] = monthStr.split("-");
+    const monthIndex = parseInt(mm, 10) - 1;
+    return `${monthNames[monthIndex]} ${yyyy}`;
+  }
+
   useEffect(() => {
     if (!selectedMonth) return;
 
@@ -308,7 +315,6 @@ excelData.push(totalRow);
                 </SelectContent>
               </Select>
             </div>
-          </div>
 
           <div className="space-y-3">
             <Label className="text-sm font-medium">Select Columns to Export</Label>
@@ -356,13 +362,13 @@ excelData.push(totalRow);
             {error && <p className="text-destructive text-sm">Error: {error}</p>}
             {!loading && !error && rows.length === 0 && (
               <p className="text-muted-foreground">
-                No data available for {months.find((m) => m.value === selectedMonth)?.label}
+                No data available for {formatMonthLabel(selectedMonth)}
               </p>
             )}
             {!loading && !error && rows.length > 0 && (
               <p className="text-sm text-muted-foreground">
                 Found {rows.length} employee record{rows.length !== 1 ? "s" : ""} for{" "}
-                {months.find((m) => m.value === selectedMonth)?.label}
+                {formatMonthLabel(selectedMonth)}
               </p>
             )}
           </div>
