@@ -71,7 +71,7 @@ export async function parseAttendanceFile(file: File): Promise<{ fileName: strin
     totalWorkingDays: totalWorkingDaysCol,
     roundOff: roundOffCol,
     duesEarned: duesEarnedCol,
-  });
+  };
 
   if (empIdCol === -1 || dayCols.length === 0) {
     throw new Error("Invalid file format: couldn't find Emp id or day columns (1..31).");
