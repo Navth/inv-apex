@@ -55,7 +55,6 @@ export default function Payroll() {
         const data = await res.json();
         setPayrollData(Array.isArray(data) ? data : []);
       } catch (err) {
-        console.error("Error fetching payroll data:", err);
         setPayrollData([]);
       } finally {
         setLoading(false);
@@ -118,7 +117,6 @@ export default function Payroll() {
         setPayrollData(Array.isArray(data) ? data : []);
       }
     } catch (err) {
-      console.error("Failed to generate payroll:", err);
       alert(`Failed to generate payroll: ${err instanceof Error ? err.message : "Unknown error"}`);
     } finally {
       setCalculating(false);
@@ -139,7 +137,6 @@ export default function Payroll() {
         setPayrollData(Array.isArray(data) ? data : []);
       }
     } catch (err) {
-      console.error("Failed to refresh payroll:", err);
     } finally {
       setLoading(false);
     }
@@ -177,7 +174,6 @@ export default function Payroll() {
       if (!silent) alert("Payroll saved successfully");
       await handleRefresh();
     } catch (err) {
-      console.error("Error saving payroll:", err);
       alert(`Failed to save payroll: ${err instanceof Error ? err.message : "Unknown error"}`);
     } finally {
       setLoading(false);
@@ -223,7 +219,6 @@ export default function Payroll() {
       setSelectedMonthNum(currentMonth);
       
     } catch (err) {
-      console.error("Error generating excel:", err);
       alert("Failed to generate Excel file");
     }
   }

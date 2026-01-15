@@ -14,7 +14,6 @@ export default function LoginForm({ onLogin }: LoginFormProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Login attempted:", username);
     onLogin?.(username, password);
   };
 

@@ -510,11 +510,19 @@ app.post("/api/payroll/generate", async (req, res) => {
       const totalMonthlyHours = 26 * workingHoursPerDay; // e.g., 26*8=208 or 26*10=260
       const hourlyBasicSalary = monthlyBasicSalary / totalMonthlyHours;
 
-      // Calculate Prorated Basic Salary: (Monthly Basic / 26) × Worked Days
-      const proratedBasicSalary = (monthlyBasicSalary / 26) * actualPresentDays;
+      // Calculate Prorated Basic Salary WITH CAPPING:
+      // If worked days >= 26: Pay FULL monthly salary (salaried employees, not daily wage)
+      // If worked days < 26: Prorate by worked days (absence penalty)
+      const proratedBasicSalary = actualPresentDays >= 26 
+        ? monthlyBasicSalary 
+        : (monthlyBasicSalary / 26) * actualPresentDays;
       
-      // Calculate Prorated Other Allowance: (Other Allowance / 26) × Worked Days
-      const proratedOtherAllowance = otherAllowance > 0 ? (otherAllowance / 26) * actualPresentDays : 0;
+      // Calculate Prorated Other Allowance WITH CAPPING:
+      // If worked days >= 26: Pay FULL allowance
+      // If worked days < 26: Prorate by worked days
+      const proratedOtherAllowance = otherAllowance > 0 
+        ? (actualPresentDays >= 26 ? otherAllowance : (otherAllowance / 26) * actualPresentDays)
+        : 0;
       
       // OT hours are already aggregated above (from all attendance records for the month)
       
@@ -576,9 +584,11 @@ app.post("/api/payroll/generate", async (req, res) => {
       
       // Only pay if BOTH Indirect category AND Own accommodation
       if (isIndirect && hasOwnAccommodation && foodAllowanceAmount > 0) {
-        // Prorate food allowance: (Food Allowance / 26) × Worked Days
-        foodAllowance = (foodAllowanceAmount / 26) * actualPresentDays;
-        console.log(`  Food Allowance: ${foodAllowance.toFixed(3)} KWD (Indirect + Own: "${employee.accommodation}")`);
+        // WITH CAPPING: If worked days >= 26, pay FULL allowance
+        foodAllowance = actualPresentDays >= 26 
+          ? foodAllowanceAmount 
+          : (foodAllowanceAmount / 26) * actualPresentDays;
+        console.log(`  Food Allowance: ${foodAllowance.toFixed(3)} KWD (Indirect + Own: "${employee.accommodation}"${actualPresentDays >= 26 ? ' - FULL' : ''})`);
       } else {
         const reason = !isIndirect ? 'Direct category' : !hasOwnAccommodation ? `Accommodation: "${employee.accommodation}"` : 'No allowance amount';
         console.log(`  Food Allowance: 0 KWD (${reason})`);
@@ -602,10 +612,11 @@ app.post("/api/payroll/generate", async (req, res) => {
       console.log(`  Month: ${month} | Attendance Records: ${empAttendances.length}`);
       console.log(`  Master Basic Salary: ${monthlyBasicSalary.toFixed(3)} KWD`);
       console.log(`  Working Hours: ${workingHoursPerDay}h/day | Total Monthly Hours: ${totalMonthlyHours}`);
-      console.log(`  Prorated Basic Salary: ${proratedBasicSalary.toFixed(3)} KWD (${monthlyBasicSalary.toFixed(3)} / 26 × ${actualPresentDays})`);
-      console.log(`  Prorated Other Allowance: ${proratedOtherAllowance.toFixed(3)} KWD`);
+      console.log(`  Prorated Basic Salary: ${proratedBasicSalary.toFixed(3)} KWD ${actualPresentDays >= 26 ? '(FULL - CAPPED at 26 days)' : `(${monthlyBasicSalary.toFixed(3)} / 26 × ${actualPresentDays})`}`);
+      console.log(`  Prorated Other Allowance: ${proratedOtherAllowance.toFixed(3)} KWD ${actualPresentDays >= 26 && otherAllowance > 0 ? '(FULL - CAPPED)' : ''}`);
       console.log(`  Hourly Basic Salary (HBS): ${hourlyBasicSalary.toFixed(3)} KWD/hour (${monthlyBasicSalary.toFixed(3)} / ${totalMonthlyHours})`);
       console.log(`  Aggregated Attendance - Working: ${workingDays}, Present: ${presentDays}, Round Off: ${roundedOffDays}, Using: ${actualPresentDays}, Absent: ${absentDays} days`);
+      console.log(`  OT Calculation Status: ${actualPresentDays >= 26 ? 'FULL MONTH - Salary CAPPED at monthly rate' : 'PARTIAL MONTH - Salary prorated'}`);
       console.log(`  Aggregated OT Hours - Normal: ${otHoursNormal.toFixed(2)}h, Friday: ${otHoursFriday.toFixed(2)}h, Holiday: ${otHoursHoliday.toFixed(2)}h`);
       console.log(`  OT Rates - Normal: ${normalOtRate.toFixed(3)}, Friday: ${fridayOtRate.toFixed(3)}, Holiday: ${holidayOtRate.toFixed(3)} KWD/hour`);
       console.log(`  OT Pay - Normal: ${normalOtPay.toFixed(3)}, Friday: ${fridayOtPay.toFixed(3)}, Holiday: ${holidayOtPay.toFixed(3)} KWD`);
@@ -615,6 +626,7 @@ app.post("/api/payroll/generate", async (req, res) => {
       console.log(`  Gross Salary: ${grossSalary.toFixed(3)} KWD`);
       console.log(`  Deductions: ${deductions.toFixed(3)} KWD`);
       console.log(`  Net Salary: ${netSalary.toFixed(3)} KWD (including dues earned)`);
+      console.log(`  ⚠️  IMPORTANT: Worked ${actualPresentDays} days ${actualPresentDays >= 26 ? '(≥26) - FULL SALARY PAID' : '(<26) - PRORATED'}`);
       
       payrolls.push({
         emp_id: employee.emp_id,

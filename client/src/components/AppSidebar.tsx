@@ -72,7 +72,6 @@ export function AppSidebar() {
       // Redirect to login page
       setLocation("/login");
     } catch (err) {
-      console.error("Logout error:", err);
       // Still redirect on error
       setLocation("/login");
     }

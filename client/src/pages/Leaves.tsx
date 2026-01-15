@@ -42,7 +42,6 @@ import ComingSoon from "@/components/ui/coming-soon";
 //       const data = await res.json();
 //       setRequests(Array.isArray(data) ? data : []);
 //     } catch (err) {
-//       console.error("Failed to load leaves", err);
 //     }
 //   }
 
@@ -57,7 +56,6 @@ import ComingSoon from "@/components/ui/coming-soon";
 //         (list || []).forEach((e: any) => { map[e.emp_id] = { name: e.name }; });
 //         setEmployees(map);
 //       } catch (err) {
-//         console.error("Failed to load employees for leaves mapping", err);
 //       }
 //     })();
 //   }, []);
@@ -68,7 +66,6 @@ import ComingSoon from "@/components/ui/coming-soon";
 //       if (!res.ok) throw new Error(await res.text());
 //       await loadLeaves();
 //     } catch (err) {
-//       console.error("Approve failed", err);
 //       alert("Approve failed");
 //     }
 //   };
@@ -79,13 +76,11 @@ import ComingSoon from "@/components/ui/coming-soon";
 //       if (!res.ok) throw new Error(await res.text());
 //       await loadLeaves();
 //     } catch (err) {
-//       console.error("Reject failed", err);
 //       alert("Reject failed");
 //     }
 //   };
 
 //   const handleView = (request: any) => {
-//     console.log("View request:", request);
 //     setSelectedRequest(request);
 //   };
 
@@ -114,7 +109,6 @@ import ComingSoon from "@/components/ui/coming-soon";
 //       await loadLeaves();
 //       setIsDialogOpen(false);
 //     } catch (err) {
-//       console.error("Create leave failed", err);
 //       alert("Create leave failed");
 //     }
 //   };

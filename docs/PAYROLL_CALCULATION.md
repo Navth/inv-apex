@@ -10,11 +10,32 @@ This document explains the payroll calculation logic implemented in the HR Manag
 
 | Parameter | Formula/Value | Description |
 |-----------|---------------|-------------|
-| **Days Divisor** | 26 | Used for prorating salary components by worked days |
+| **Days Divisor** | 26 | Standard working days per month (Kuwait labor standard) |
 | **Total Monthly Hours** | 26 × Working Hours/Day | Variable based on employee (e.g., 208 for 8h/day, 260 for 10h/day) |
 | **Normal OT Multiplier (M_N)** | 1.25 | Factor applied to Hourly Basic Salary for Normal Overtime |
 | **Friday OT Multiplier (M_F)** | 1.50 | Factor applied to Hourly Basic Salary for Friday Overtime |
 | **Holiday OT Multiplier (M_H)** | 2.00 | Factor applied to Hourly Basic Salary for Holiday Overtime |
+
+### CRITICAL: Monthly Salary Capping Rule
+
+**Employees are monthly salaried, NOT daily wage workers.**
+
+```
+IF Worked Days >= 26:
+    Basic Salary Payable = Full Monthly Basic Salary (NO proration)
+    Other Allowance Payable = Full Monthly Other Allowance (NO proration)
+    Food Allowance Payable = Full Monthly Food Allowance (NO proration)
+ELSE:
+    Basic Salary Payable = (Monthly Basic / 26) × Worked Days (prorated)
+    Other Allowance Payable = (Other Allowance / 26) × Worked Days (prorated)
+    Food Allowance Payable = (Food Allowance / 26) × Worked Days (prorated)
+```
+
+**Why this matters:**
+- December 2025 has 31 calendar days, employees may work 27-28 days
+- Working MORE than 26 days should NOT increase base salary
+- Only absence (< 26 days) reduces salary proportionally
+- This prevents the "December Error" where (1250/26) × 27 = 1,298 KD instead of 1,250 KD
 
 ---
 
@@ -124,7 +145,10 @@ Food Allowance = 0
 # Only change if ALL conditions met
 IF (Employee.category == "Indirect") 
    AND ("own" in Employee.accommodation.strip().lower()):
-    Food Allowance = (employee.food_allowance_amount / 26) × Worked Days
+    IF Worked Days >= 26:
+        Food Allowance = employee.food_allowance_amount (FULL - NO proration)
+    ELSE:
+        Food Allowance = (employee.food_allowance_amount / 26) × Worked Days
 ELSE:
     Food Allowance = 0  # Safe default
 ```
@@ -156,53 +180,120 @@ Food Allowance = 0 KWD (food provided by company)
 
 ---
 
-## 5. Prorated Components
+## 5. Attendance Aggregation & Round Off Days
+
+### Multiple Attendance Records Per Month
+The system supports multiple attendance records per employee per month. When generating payroll:
+- All attendance records for the month are aggregated
+- Working days, present days, and OT hours are summed
+- Comments from multiple records are concatenated with ";" separator
+
+### Round Off Days (Attendance Adjustment)
+The system uses `round_off` field from attendance records if available:
+- **Priority 1**: Use `round_off` value if > 0 (attendance adjusted for late/early leave)
+- **Priority 2**: Use `present_days` if `round_off` is 0 or not set
+- This allows supervisors to adjust attendance for partial days, late arrivals, early departures
+
+**Example:**
+```
+Employee: Worked 20 days but had 3 days of late arrivals
+Present Days: 20
+Round Off: 19.5 (adjusted by supervisor)
+Used for Calculation: 19.5 days
+```
+
+---
+
+## 6. Prorated Components
 
 All earning components are prorated based on worked days using the constant divisor of 26.
 
-### 5.1 Prorated Basic Salary
+### 6.1 Prorated Basic Salary (WITH CAPPING)
 
 **Formula:**
 ```
-Earned Basic = (Monthly Basic Salary / 26) × Worked Days
+IF Worked Days >= 26:
+    Earned Basic = Monthly Basic Salary (FULL - NO proration)
+ELSE:
+    Earned Basic = (Monthly Basic Salary / 26) × Worked Days
 ```
 
-**Example:**
+**Example 1 (Partial Month):**
 ```
 Master Basic Salary: 450 KWD
 Worked Days: 19
 Earned Basic = (450 / 26) × 19 = 328.85 KWD
 ```
 
-### 5.2 Prorated Other Allowance
+**Example 2 (Full Month with 27 days - December):**
+```
+Master Basic Salary: 1,250 KWD
+Worked Days: 27
+Earned Basic = 1,250.00 KWD (CAPPED - not 1,298.07)
+```
+
+### 6.2 Prorated Other Allowance (WITH CAPPING)
 
 **Formula:**
 ```
-IF employee.other_allowance > 0:
-    Earned Other = (Other Allowance / 26) × Worked Days
-ELSE:
+IF employee.other_allowance <= 0:
     Earned Other = 0
+ELSE IF Worked Days >= 26:
+    Earned Other = Other Allowance (FULL - NO proration)
+ELSE:
+    Earned Other = (Other Allowance / 26) × Worked Days
 ```
 
-**Example:**
+**Example 1 (Full Month):**
 ```
 Master Other Allowance: 25 KWD
 Worked Days: 26
-Earned Other = (25 / 26) × 26 = 25.00 KWD
+Earned Other = 25.00 KWD (FULL)
 ```
 
-### 5.3 Prorated Food Allowance (See Section 4)
+**Example 2 (Full Month - 27 days):**
+```
+Master Other Allowance: 25 KWD
+Worked Days: 27
+Earned Other = 25.00 KWD (CAPPED - not 25.96)
+```
+
+### 6.3 Prorated Food Allowance (See Section 4)
 
 Only for indirect employees, prorated by worked days.
 
 ---
 
-## 6. Gross Salary
+## 7. Dues Earned (Manual Input)
+
+Dues earned is a manual input field in the attendance record that represents additional amounts owed to the employee:
+- **Not prorated** - entered as the exact amount to be paid
+- **Not subject to OT calculations** - direct payment
+- **Common uses**: Corrections from previous months, special compensations, agreed settlements
+- **Aggregated**: When multiple attendance records exist for a month, dues are summed
+
+**Formula:**
+```
+Dues Earned = Sum of all dues_earned from attendance records for the month
+```
+
+**Example:**
+```
+Attendance Record 1 (Week 1-2): Dues = 50 KWD
+Attendance Record 2 (Week 3-4): Dues = 25 KWD
+Total Dues Earned = 75 KWD (added to net salary)
+```
+
+---
+
+## 8. Gross Salary
 
 **Formula:**
 ```
 Gross Salary = Prorated Basic + Prorated Other + Prorated Food + Total OT Pay
 ```
+
+**Note**: Dues earned is NOT included in gross salary; it's added to net salary.
 
 ### Components:
 1. **Prorated Basic Salary**: `(Monthly Basic / 26) × Worked Days`
@@ -222,11 +313,11 @@ Gross Salary = 328.85 + 25.00 + 18.27 + 44.47 = 416.59 KWD
 
 ---
 
-## 7. Net Salary
+## 9. Net Salary
 
 **Formula:**
 ```
-Net Salary = Gross Salary - Deductions
+Net Salary = Gross Salary + Dues Earned - Deductions
 ```
 
 ### Rounding Rule:
@@ -244,9 +335,10 @@ Currently, the system has deductions set to 0. This can be extended in the futur
 ### Example:
 ```
 Gross Salary: 416.59 KWD
+Dues Earned: 50.00 KWD
 Deductions: 0.00 KWD
-Net Salary (before rounding): 416.59 KWD
-Net Salary (after rounding): 417 KWD
+Net Salary (before rounding): 466.59 KWD
+Net Salary (after rounding): 467 KWD
 ```
 
 ---
@@ -261,10 +353,14 @@ Net Salary (after rounding): 417 KWD
 - **OT Rates**: Default (no custom rates)
 
 ### Attendance Data:
-- **Worked Days**: 19
+- **Working Days**: 26
+- **Present Days**: 20
+- **Round Off**: 19 (adjusted for late arrivals)
+- **Days Used for Calculation**: 19 (round_off takes priority)
 - **Normal OT**: 10 hours
 - **Friday OT**: 4 hours
 - **Holiday OT**: 0 hours
+- **Dues Earned**: 50 KWD (manual input)
 
 ### Step-by-Step Calculation:
 
@@ -295,12 +391,15 @@ Net Salary (after rounding): 417 KWD
 7. Gross Salary:
    Gross = 328.85 + 18.27 + 18.27 + 40.02 = 405.41 KWD
 
-8. Deductions:
+8. Dues Earned:
+   Dues = 50.00 KWD (manual input from attendance)
+
+9. Deductions:
    Deductions = 0.00 KWD
 
-9. Net Salary:
-   Net (before rounding) = 405.41 KWD
-   Net (after rounding) = 405 KWD
+10. Net Salary:
+    Net (before rounding) = 405.41 + 50.00 - 0.00 = 455.41 KWD
+    Net (after rounding) = 455 KWD
 ```
 
 ---
@@ -330,14 +429,25 @@ Total OT Pay = Normal OT Pay + Friday OT Pay + Holiday OT Pay
 IF department == "Rehab" AND category == "Indirect":
     Total OT Pay = Total OT Pay × 0.70
 
-# Prorated Components
-Earned Basic = (Monthly Basic Salary / 26) × Worked Days
-Earned Other = (Other Allowance / 26) × Worked Days
-Earned Food = (Food Allowance / 26) × Worked Days (Indirect only, 0 for Direct)
+# Prorated Components (WITH SALARY CAPPING)
+IF Worked Days >= 26:
+    Earned Basic = Monthly Basic Salary (FULL)
+    Earned Other = Other Allowance (FULL)
+    Earned Food = Food Allowance (FULL, Indirect only)
+ELSE:
+    Earned Basic = (Monthly Basic Salary / 26) × Worked Days
+    Earned Other = (Other Allowance / 26) × Worked Days
+    Earned Food = (Food Allowance / 26) × Worked Days (Indirect only)
+
+# Attendance Days Logic
+IF round_off > 0:
+    Worked Days = round_off
+ELSE:
+    Worked Days = present_days
 
 # Final Calculation
 Gross Salary = Earned Basic + Earned Other + Earned Food + Total OT Pay
-Net Salary = ROUND(Gross Salary - Deductions)
+Net Salary = ROUND(Gross Salary + Dues Earned - Deductions)
 ```
 
 ---
@@ -391,9 +501,11 @@ GET /api/payroll?month=MM-YYYY
     "basic_salary": "500.00",
     "ot_amount": "44.47",
     "food_allowance": "48.00",
+    "days_worked": "26.00",
     "gross_salary": "592.47",
     "deductions": "0.00",
-    "net_salary": "592.47",
+    "dues_earned": "50.00",
+    "net_salary": "642.47",
     "generated_at": "2025-11-17T..."
   }
 ]
@@ -425,9 +537,12 @@ GET /api/payroll?month=MM-YYYY
   working_days: integer
   present_days: integer
   absent_days: integer
+  round_off: decimal (optional - adjusted days for calculations)
   ot_hours_normal: decimal
   ot_hours_friday: decimal
   ot_hours_holiday: decimal
+  dues_earned: decimal (default: 0) // Manual input for additional payments
+  comments: string (optional) // Attendance notes
 }
 ```
 
@@ -436,11 +551,13 @@ GET /api/payroll?month=MM-YYYY
 {
   emp_id: string
   month: string (MM-YYYY format)
-  basic_salary: decimal
+  basic_salary: decimal (prorated)
   ot_amount: decimal
   food_allowance: decimal
+  days_worked: decimal (actual days used for calculation)
   gross_salary: decimal
   deductions: decimal
+  dues_earned: decimal // Added to net salary
   net_salary: decimal
   generated_at: timestamp
 }
@@ -456,11 +573,13 @@ GET /api/payroll?month=MM-YYYY
 - Inactive or terminated employees are automatically skipped
 
 ### Attendance Validation
-- Each employee must have exactly one attendance record per month
+- Employees can have one or multiple attendance records per month (aggregated)
 - Missing attendance records result in a warning and the employee is skipped
 - Attendance data must include working days, present days, and OT hours
+- **Round off days take priority**: If `round_off > 0`, use it instead of `present_days`
 - **Employees with zero working days are skipped** (no payroll generated)
-- **Employees with zero present days are skipped** (no work performed, no pay)
+- **Employees with zero present/round_off days are skipped** (no work performed, no pay)
+- **Multiple records aggregated**: Working days, present days, OT hours, and dues summed
 
 ### Leave Impact
 - Approved leaves remove food allowance eligibility

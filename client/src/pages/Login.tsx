@@ -22,7 +22,6 @@ export default function Login() {
       // Successful login - force page reload to trigger auth check
       window.location.href = "/";
     } catch (err) {
-      console.error("Login error:", err);
       alert("Login failed. Please try again.");
     }
   };

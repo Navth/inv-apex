@@ -58,7 +58,6 @@ export default function App() {
           setLocation("/login");
         }
       } catch (error) {
-        console.error("Auth check failed:", error);
         setIsAuthenticated(false);
         setLocation("/login");
       }

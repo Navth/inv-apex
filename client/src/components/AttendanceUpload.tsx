@@ -35,7 +35,6 @@ export default function AttendanceUpload({ selectedMonth, onUpload }: Attendance
       }
     }
     catch (err){
-      console.error("Failed to load employees:", err);
     }
   }
   loadEmployees();

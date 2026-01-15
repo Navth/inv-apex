@@ -69,7 +69,6 @@ export default function Employees() {
       }));
       setEmployees(mapped);
     } catch (err) {
-      console.error("Failed to load employees", err);
       alert("Failed to load employees");
     }
   }
@@ -96,7 +95,6 @@ export default function Employees() {
       alert("Employee deleted successfully");
       await loadEmployees();
     } catch (err) {
-      console.error("Failed to delete employee", err);
       alert("Delete failed");
     }
   };
@@ -148,7 +146,6 @@ export default function Employees() {
       setIsDialogOpen(false);
       setEditingEmployee(null);
     } catch (err) {
-      console.error("Failed to save employee", err);
       alert("Save failed");
     }
   };

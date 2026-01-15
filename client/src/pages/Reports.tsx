@@ -74,7 +74,6 @@ export default function Reports() {
         const data = await res.json();
         setRows(Array.isArray(data) ? data : []);
       } catch (err: any) {
-        console.error("Report load error:", err);
         setError(err.message || "Failed to load report");
         setRows([]);
       } finally {
@@ -142,12 +141,11 @@ export default function Reports() {
       });
       return filteredRow;
     });
-// ✅ add total row for all numeric columns
+
 const totalRow: Record<string, any> = {};
 const firstSelectedLabel = columnMap[selectedColumns[0]] || selectedColumns[0];
 totalRow[firstSelectedLabel] = "TOTAL";
 
-// which columns should be summed numerically
 const numericCols = [
   "salary",
   "worked_days",
@@ -163,7 +161,6 @@ const numericCols = [
   "total_earnings",
 ];
 
-// for each selected column, if numeric → sum, else leave blank
 selectedColumns.forEach((colId) => {
   const label = columnMap[colId] || colId;
   if (numericCols.includes(colId)) {
@@ -171,7 +168,6 @@ selectedColumns.forEach((colId) => {
       (sum, row) => sum + (Number(row[colId]) || 0),
       0
     );
-    // Round all totals to whole numbers (no decimals)
     totalRow[label] = Math.round(total);
   } else if (label !== firstSelectedLabel) {
     totalRow[label] = "";

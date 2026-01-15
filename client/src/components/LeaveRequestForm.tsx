@@ -36,7 +36,6 @@ export default function LeaveRequestForm({ onSubmit, onCancel }: LeaveRequestFor
       status: "Pending",
       submittedAt: new Date().toISOString(),
     };
-    console.log("Leave request submitted:", formData);
     onSubmit?.(formData);
   };
 

@@ -89,7 +89,6 @@ export default function DashboardStats() {
           attendanceRate,
         });
       } catch (err) {
-        console.error("Failed to load dashboard stats", err);
       }
     }
 

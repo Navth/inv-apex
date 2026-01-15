@@ -60,12 +60,7 @@ export async function parseAttendanceFile(file: File): Promise<{ fileName: strin
   const roundOffCol = findHeader(["roundoff", "round_off", "round-off"]);
   const duesEarnedCol = findHeader(["duesearned", "dues_earned", "dues-earned", "dues"]);
   
-  // Debug logging - will help identify column mapping issues
-  console.log("📋 Attendance Parser Debug Info:");
-  console.log("Header row index:", headerIdx);
-  console.log("Raw headers:", header);
-  console.log("Normalized headers:", headerTight);
-  console.log("Column mappings:", {
+  const columnMappings = {
     empId: empIdCol,
     name: nameCol,
     dayCols,
@@ -147,17 +142,7 @@ export async function parseAttendanceFile(file: File): Promise<{ fileName: strin
     };
     
     parsedRecords.push(record);
-    
-    // Debug log first 3 records to help identify value issues
-    if (r - headerIdx <= 3) {
-      console.log(`Record ${r - headerIdx} (${emp_id}):`, {
-        rawRow: row.map((cell, idx) => ({ col: idx, header: header[idx], value: cell })),
-        parsed: record,
-      });
-    }
   }
-  
-  console.log(`✅ Parsed ${parsedRecords.length} records successfully`);
 
   return { fileName: file.name, records: parsedRecords };
 }

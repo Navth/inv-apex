@@ -44,25 +44,40 @@ export function calculateHourlyBasicSalary(
 }
 
 /**
- * Calculate prorated basic salary based on worked days
- * Formula: Earned Basic = (Monthly Basic / 26) × Worked Days
+ * Calculate prorated basic salary based on worked days WITH CAPPING
+ * Formula: 
+ *   - If worked days >= 26: Pay FULL monthly salary (salaried employees)
+ *   - If worked days < 26: Prorate by worked days (absence penalty)
+ * This prevents overpayment when employees work 27+ days in a month (e.g., December)
  */
 export function calculateProratedBasicSalary(
   basicSalary: number,
   workedDays: number
 ): number {
+  // Employees are monthly salaried, not daily wage workers
+  // Working more than 26 days should NOT increase base salary
+  if (workedDays >= KUWAIT_WORKING_DAYS_PER_MONTH) {
+    return basicSalary; // FULL salary - CAPPED
+  }
   return (basicSalary / KUWAIT_WORKING_DAYS_PER_MONTH) * workedDays;
 }
 
 /**
- * Calculate prorated other allowance based on worked days
- * Formula: Earned Other = (Other Allowance / 26) × Worked Days
+ * Calculate prorated other allowance based on worked days WITH CAPPING
+ * Formula: 
+ *   - If worked days >= 26: Pay FULL allowance
+ *   - If worked days < 26: Prorate by worked days
  */
 export function calculateProratedOtherAllowance(
   otherAllowance: number,
   workedDays: number
 ): number {
   if (otherAllowance <= 0) return 0;
+  
+  // Cap at full monthly allowance if worked full month or more
+  if (workedDays >= KUWAIT_WORKING_DAYS_PER_MONTH) {
+    return otherAllowance; // FULL allowance - CAPPED
+  }
   return (otherAllowance / KUWAIT_WORKING_DAYS_PER_MONTH) * workedDays;
 }
 
@@ -152,12 +167,13 @@ export function calculateOvertimeAmount(
 }
 
 /**
- * Calculate food allowance for an employee
+ * Calculate food allowance for an employee WITH CAPPING
  * Rules (Positive Logic - Default to 0):
  * 1. Default food allowance is 0 (SAFE)
  * 2. Only pay if accommodation contains "own" (case-insensitive, fuzzy match)
  * 3. Must be Indirect category
- * 4. Prorated by worked days
+ * 4. If worked days >= 26: Pay FULL allowance
+ * 5. If worked days < 26: Prorate by worked days
  */
 export function calculateFoodAllowance(
   employee: Employee,
@@ -177,8 +193,13 @@ export function calculateFoodAllowance(
   if (isIndirect && hasOwnAccommodation) {
     const foodAllowanceAmount = parseFloat(employee.food_allowance_amount || "0");
     if (foodAllowanceAmount > 0) {
-      // Prorate food allowance: (Food Allowance / 26) × Worked Days
-      foodAllowance = (foodAllowanceAmount / KUWAIT_WORKING_DAYS_PER_MONTH) * workedDays;
+      // WITH CAPPING: If worked days >= 26, pay FULL allowance
+      if (workedDays >= KUWAIT_WORKING_DAYS_PER_MONTH) {
+        foodAllowance = foodAllowanceAmount; // FULL allowance - CAPPED
+      } else {
+        // Prorate food allowance: (Food Allowance / 26) × Worked Days
+        foodAllowance = (foodAllowanceAmount / KUWAIT_WORKING_DAYS_PER_MONTH) * workedDays;
+      }
     }
   }
   

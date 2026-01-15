@@ -57,7 +57,6 @@ export default function Attendance() {
       alert("Attendance records saved successfully.");
       setUploaderKey((k) => k + 1);
     } catch (err) {
-      console.error(err);
       alert("Failed to save attendance records.");
     }
   };

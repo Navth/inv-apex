@@ -57,7 +57,6 @@ export default function Indemnity() {
       }));
       setRecords(tableRows);
     } catch (err) {
-      console.error("Failed to load indemnity data", err);
       alert("Failed to load indemnity data");
     } finally {
       setLoading(false);
@@ -89,7 +88,6 @@ export default function Indemnity() {
       alert("Indemnity calculated successfully for all employees");
       await loadData(); // Refresh data
     } catch (err) {
-      console.error("Failed to calculate indemnity", err);
       alert("Failed to calculate indemnity");
     } finally {
       setCalculating(false);
@@ -116,13 +114,11 @@ export default function Indemnity() {
       alert("Indemnity marked as paid successfully");
       await loadData(); // Refresh data
     } catch (err) {
-      console.error("Failed to mark as paid", err);
       alert("Failed to mark indemnity as paid");
     }
   };
 
   const handleEdit = (record: any) => {
-    console.log("Edit indemnity record:", record);
     // TODO: Implement edit modal or navigation
   };
 

@@ -10,3 +10,4 @@ vite.config.ts.*
 migrations/
 
 /client/src/scripts/
+docs/PAYROLL_CALCULATION.md
