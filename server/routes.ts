@@ -810,12 +810,20 @@ app.post("/api/payroll/generate", async (req, res) => {
         const totalMonthlyHours = 26 * workingHoursPerDay; // e.g., 26*8=208 or 26*10=260
         const hourlyBasicSalary = master_basic_salary / totalMonthlyHours;
         
-        // Calculate prorated basic salary: (Basic / 26) × Worked Days
-        const prorated_basic = (master_basic_salary / 26) * worked_days;
+        // Calculate prorated basic salary WITH CAPPING:
+        // If worked days >= 26: Pay FULL monthly salary (salaried employees, not daily wage)
+        // If worked days < 26: Prorate by worked days (absence penalty)
+        const prorated_basic = worked_days >= 26 
+          ? master_basic_salary 
+          : (master_basic_salary / 26) * worked_days;
         
-        // Calculate prorated other allowance: (Other / 26) × Worked Days
+        // Calculate prorated other allowance WITH CAPPING:
+        // If worked days >= 26: Pay FULL allowance
+        // If worked days < 26: Prorate by worked days
         const other_allowance = Number(e.other_allowance ?? 0);
-        const prorated_other = other_allowance > 0 ? (other_allowance / 26) * worked_days : 0;
+        const prorated_other = other_allowance > 0 
+          ? (worked_days >= 26 ? other_allowance : (other_allowance / 26) * worked_days)
+          : 0;
         
         // Calculate OT rates based on hourly basic salary (from full monthly salary)
         const customRateNormal = Number(e.ot_rate_normal ?? 0);
@@ -856,7 +864,10 @@ app.post("/api/payroll/generate", async (req, res) => {
         if (isIndirect && hasOwnAccommodation) {
           const food_amount = Number(e.food_allowance_amount ?? 0);
           if (food_amount > 0) {
-            food_allow_calc = (food_amount / 26) * worked_days;
+            // WITH CAPPING: If worked days >= 26, pay FULL allowance
+            food_allow_calc = worked_days >= 26 
+              ? food_amount 
+              : (food_amount / 26) * worked_days;
           }
         }
 
