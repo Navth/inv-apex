@@ -146,3 +146,6 @@ export async function parseAttendanceFile(file: File): Promise<{ fileName: strin
 
   return { fileName: file.name, records: parsedRecords };
 }
+
+
+// Example 
