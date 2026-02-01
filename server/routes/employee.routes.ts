@@ -1,0 +1,146 @@
+/**
+ * Employee Routes
+ */
+
+import { Router } from "express";
+import { z } from "zod";
+import { storage } from "../storage";
+import { insertEmployeeSchema } from "@shared/schema";
+
+const router = Router();
+
+/**
+ * GET /api/employees
+ * Get all employees
+ */
+router.get("/", async (req, res) => {
+  try {
+    const employees = await storage.getEmployees();
+    res.json(employees);
+  } catch (error) {
+    console.error("/api/employees error:", error);
+    res.status(500).json({ error: "Failed to fetch employees" });
+  }
+});
+
+/**
+ * GET /api/employees/:empId
+ * Get single employee by ID
+ */
+router.get("/:empId", async (req, res) => {
+  try {
+    const employee = await storage.getEmployee(req.params.empId);
+    if (!employee) {
+      return res.status(404).json({ error: "Employee not found" });
+    }
+    res.json(employee);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch employee" });
+  }
+});
+
+/**
+ * POST /api/employees
+ * Create a new employee
+ */
+router.post("/", async (req, res) => {
+  try {
+    const data = insertEmployeeSchema.parse(req.body);
+    const employee = await storage.createEmployee(data);
+    res.json(employee);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: error.errors });
+    }
+    res.status(500).json({ error: "Failed to create employee" });
+  }
+});
+
+/**
+ * POST /api/employees/bulk
+ * Bulk create employees
+ */
+router.post("/bulk", async (req, res) => {
+  try {
+    const { employees } = req.body;
+    if (!Array.isArray(employees) || employees.length === 0) {
+      return res.status(400).json({ error: "employees array is required" });
+    }
+
+    const created: any[] = [];
+
+    for (let index = 0; index < employees.length; index++) {
+      const raw = employees[index];
+      try {
+        const payload = {
+          emp_id: String(raw.emp_id),
+          name: raw.name,
+          civil_id: raw.civil_id || null,
+          designation: raw.designation,
+          department: raw.department,
+          category: raw.category || "Direct",
+          doj: raw.doj,
+          internal_department_doj: raw.internal_department_doj || null,
+          five_year_calc_date: null,
+          basic_salary: String(raw.basic_salary ?? 0),
+          other_allowance: String(raw.other_allowance ?? 0),
+          ot_rate_normal: String(0),
+          ot_rate_friday: String(0),
+          ot_rate_holiday: String(0),
+          food_allowance_type: raw.food_allowance > 0 ? "fixed" : "none",
+          food_allowance_amount: String(raw.food_allowance ?? 0),
+          working_hours: raw.working_hours ?? 8,
+          indemnity_rate: String(raw.indemnity_rate ?? 15),
+          status: "active",
+        };
+
+        console.log("Row", index, "payload:", payload);
+        const data = insertEmployeeSchema.parse(payload);
+        const employee = await storage.createEmployee(data);
+        created.push(employee);
+      } catch (err) {
+        console.error("Error on row", index, raw.emp_id, err);
+        return res.status(400).json({ row: index, emp_id: raw.emp_id, error: String(err) });
+      }
+    }
+
+    res.json({ count: created.length, created });
+  } catch (err) {
+    console.error("Bulk employees upload error (outer):", err);
+    res.status(500).json({ error: "Failed to bulk create employees", details: String(err) });
+  }
+});
+
+/**
+ * PATCH /api/employees/:empId
+ * Update an employee
+ */
+router.patch("/:empId", async (req, res) => {
+  try {
+    const employee = await storage.updateEmployee(req.params.empId, req.body);
+    if (!employee) {
+      return res.status(404).json({ error: "Employee not found" });
+    }
+    res.json(employee);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to update employee" });
+  }
+});
+
+/**
+ * DELETE /api/employees/:empId
+ * Delete an employee
+ */
+router.delete("/:empId", async (req, res) => {
+  try {
+    const deleted = await storage.deleteEmployee(req.params.empId);
+    if (!deleted) {
+      return res.status(404).json({ error: "Employee not found" });
+    }
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to delete employee" });
+  }
+});
+
+export default router;

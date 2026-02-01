@@ -225,6 +225,8 @@ export function calculateEmployeePayroll(
   monthlyLeaves: Leave[]
 ): {
   basicSalary: number;
+  payableBasicSalary: number;
+  otherAllowance: number;
   hourlyBasicSalary: number;
   otAmount: number;
   foodAllowance: number;

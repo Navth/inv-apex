@@ -54,7 +54,6 @@ export class MemStorage implements IStorage {
 
   async createEmployee(employee: InsertEmployee): Promise<Employee> {
     const newEmployee: Employee = {
-      id: this.employeeIdCounter++,
       status: "active",
       ot_rate_normal: "0",
       ot_rate_friday: "0",
@@ -65,6 +64,7 @@ export class MemStorage implements IStorage {
       working_hours: 8,
       other_allowance: "0",
       indemnity_rate: "0",
+      accommodation: "Own",
       ...employee,
     };
     this.employees.set(employee.emp_id, newEmployee);
@@ -101,6 +101,9 @@ export class MemStorage implements IStorage {
       ot_hours_normal: "0",
       ot_hours_friday: "0",
       ot_hours_holiday: "0",
+      round_off: null,
+      comments: null,
+      dues_earned: "0",
       ...attendance,
       uploaded_at: new Date(),
     };
@@ -136,6 +139,7 @@ export class MemStorage implements IStorage {
       food_allowance: "0",
       deductions: "0",
       days_worked: 0,
+      dues_earned: "0",
       ...payroll,
       generated_at: new Date(),
     };
@@ -150,6 +154,24 @@ export class MemStorage implements IStorage {
       created.push(newPayroll);
     }
     return created;
+  }
+
+  async updatePayroll(empId: string, month: string, updates: Partial<InsertPayroll>): Promise<Payroll | undefined> {
+    const all = Array.from(this.payrolls.values());
+    const payroll = all.find((p) => p.emp_id === empId && p.month === month);
+    if (!payroll) return undefined;
+    const updated = { ...payroll, ...updates };
+    this.payrolls.set(payroll.id, updated);
+    return updated;
+  }
+
+  async deletePayroll(month: string): Promise<void> {
+    const toDelete = Array.from(this.payrolls.entries())
+      .filter(([, p]) => p.month === month)
+      .map(([id]) => id);
+    for (const id of toDelete) {
+      this.payrolls.delete(id);
+    }
   }
 
   async getLeaves(status?: string): Promise<Leave[]> {
