@@ -1,6 +1,9 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, DollarSign, TrendingUp, Calendar } from "lucide-react";
+import { employeesApi } from "@/api/employees";
+import { payrollApi } from "@/api/payroll";
+import { attendanceApi } from "@/api/attendance";
 
 interface StatsCardProps {
   title: string;
@@ -49,14 +52,10 @@ export default function DashboardStats() {
 
       try {
         // Fetch all employees
-        const employeesRes = await fetch("/api/employees", { credentials: "include" });
-        const employees = employeesRes.ok ? await employeesRes.json() : [];
+        const employees = await employeesApi.getAll();
 
         // Monthly payroll for current month
-        const payrollRes = await fetch(`/api/payroll?month=${encodeURIComponent(currentMonth)}`, {
-          credentials: "include",
-        });
-        const payrollData = payrollRes.ok ? await payrollRes.json() : [];
+        const payrollData = await payrollApi.getAll(currentMonth);
         const payrollSum = payrollData.reduce(
           (sum: number, row: any) => sum + Number(row.net_salary || 0),
           0,
@@ -68,11 +67,7 @@ export default function DashboardStats() {
         ).length;
 
         // Attendance for current month to compute rate
-        const attendanceRes = await fetch(
-          `/api/attendance?month=${encodeURIComponent(currentMonth)}`,
-          { credentials: "include" },
-        );
-        const attendance = attendanceRes.ok ? await attendanceRes.json() : [];
+        const attendance = await attendanceApi.getAll(currentMonth);
         let totalPresent = 0;
         let totalWorking = 0;
         (attendance || []).forEach((a: any) => {

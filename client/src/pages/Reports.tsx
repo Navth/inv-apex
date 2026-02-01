@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Download, FileSpreadsheet, FileText, RefreshCw } from "lucide-react";
 import * as XLSX from "xlsx";
+import { reportsApi } from "@/api/reports";
 
 export default function Reports() {
   const monthNames = [
@@ -64,14 +65,7 @@ export default function Reports() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`/api/reports?month=${encodeURIComponent(selectedMonth)}`, {
-          credentials: "include",
-        });
-        if (!res.ok) {
-          const errorText = await res.text();
-          throw new Error(errorText || "Failed to load report");
-        }
-        const data = await res.json();
+        const data = await reportsApi.get(selectedMonth);
         setRows(Array.isArray(data) ? data : []);
       } catch (err: any) {
         setError(err.message || "Failed to load report");

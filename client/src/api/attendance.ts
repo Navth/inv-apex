@@ -39,11 +39,27 @@ export async function bulkCreateAttendance(attendances: InsertAttendance[]): Pro
   return api.post<Attendance[]>('/api/attendance/bulk', attendances);
 }
 
+/**
+ * Update an attendance record
+ */
+export async function updateAttendance(id: number, updates: Partial<InsertAttendance>): Promise<Attendance> {
+  return api.patch<Attendance>(`/api/attendance/${id}`, updates);
+}
+
+/**
+ * Delete an attendance record
+ */
+export async function deleteAttendance(id: number): Promise<{ success: boolean; message: string }> {
+  return api.delete<{ success: boolean; message: string }>(`/api/attendance/${id}`);
+}
+
 export const attendanceApi = {
   getAll: getAttendance,
   getByEmployee: getEmployeeAttendance,
   create: createAttendance,
   bulkCreate: bulkCreateAttendance,
+  update: updateAttendance,
+  delete: deleteAttendance,
 };
 
 export default attendanceApi;

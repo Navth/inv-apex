@@ -31,6 +31,8 @@ export interface IStorage {
   getAttendanceByEmployee(empId: string, month?: string): Promise<Attendance[]>;
   createAttendance(attendance: InsertAttendance): Promise<Attendance>;
   bulkCreateAttendance(attendances: InsertAttendance[]): Promise<Attendance[]>;
+  updateAttendance(id: number, attendance: Partial<InsertAttendance>): Promise<Attendance | undefined>;
+  deleteAttendance(id: number): Promise<boolean>;
 
   // Payroll
   getPayroll(month?: string): Promise<Payroll[]>;

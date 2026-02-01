@@ -3,6 +3,8 @@ import IndemnityTable from "@/components/IndemnityTable";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DollarSign, TrendingUp, Users, Calculator, RefreshCw } from "lucide-react";
+import { indemnityApi } from "@/api/indemnity";
+import { employeesApi } from "@/api/employees";
 
 interface EmployeeLite {
   emp_id: string;
@@ -28,12 +30,10 @@ export default function Indemnity() {
   async function loadData() {
     setLoading(true);
     try {
-      const [indRes, empRes] = await Promise.all([
-        fetch("/api/indemnity", { credentials: "include" }),
-        fetch("/api/employees", { credentials: "include" }),
+      const [indemnity, emps] = await Promise.all([
+        indemnityApi.getAll(),
+        employeesApi.getAll(),
       ]);
-      const indemnity = indRes.ok ? await indRes.json() : [];
-      const emps = empRes.ok ? await empRes.json() : [];
       const map: Record<string, EmployeeLite> = {};
       (emps || []).forEach((e: any) => {
         map[e.emp_id] = {
@@ -76,14 +76,7 @@ export default function Indemnity() {
 
     setCalculating(true);
     try {
-      const res = await fetch("/api/indemnity/calculate", {
-        method: "POST",
-        credentials: "include",
-      });
-
-      if (!res.ok) {
-        throw new Error("Failed to calculate indemnity");
-      }
+      await indemnityApi.calculate();
 
       alert("Indemnity calculated successfully for all employees");
       await loadData(); // Refresh data
@@ -102,14 +95,7 @@ export default function Indemnity() {
     if (!confirmed) return;
 
     try {
-      const res = await fetch(`/api/indemnity/${empId}/pay`, {
-        method: "PATCH",
-        credentials: "include",
-      });
-
-      if (!res.ok) {
-        throw new Error("Failed to mark as paid");
-      }
+      await indemnityApi.markPaid(empId);
 
       alert("Indemnity marked as paid successfully");
       await loadData(); // Refresh data

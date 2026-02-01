@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Calculator, RefreshCw } from "lucide-react";
 import * as XLSX from "xlsx";
+import { payrollApi } from "@/api/payroll";
 
 export default function Payroll() {
   const monthNames = [
@@ -48,11 +49,7 @@ export default function Payroll() {
     async function fetchPayroll() {
       setLoading(true);
       try {
-        const res = await fetch(`/api/payroll?month=${encodeURIComponent(selectedMonth)}`, {
-          credentials: "include",
-        });
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
+        const data = await payrollApi.getAll(selectedMonth);
         setPayrollData(Array.isArray(data) ? data : []);
       } catch (err) {
         setPayrollData([]);
@@ -82,19 +79,7 @@ export default function Payroll() {
 
     setCalculating(true);
     try {
-      const res = await fetch("/api/payroll/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ month: selectedMonth }),
-      });
-      
-      if (!res.ok) {
-        const error = await res.text();
-        throw new Error(error || "Failed to generate payroll");
-      }
-      
-      const result = await res.json();
+      const result = await payrollApi.generate(selectedMonth);
       
       // Show detailed message
       let message = result.message || `Payroll generated successfully for ${result.count || 0} employees`;
@@ -109,13 +94,8 @@ export default function Payroll() {
       alert(message);
       
       // Refresh payroll data
-      const listRes = await fetch(`/api/payroll?month=${encodeURIComponent(selectedMonth)}`, {
-        credentials: "include",
-      });
-      if (listRes.ok) {
-        const data = await listRes.json();
-        setPayrollData(Array.isArray(data) ? data : []);
-      }
+      const data = await payrollApi.getAll(selectedMonth);
+      setPayrollData(Array.isArray(data) ? data : []);
     } catch (err) {
       alert(`Failed to generate payroll: ${err instanceof Error ? err.message : "Unknown error"}`);
     } finally {
@@ -129,13 +109,8 @@ export default function Payroll() {
     
     setLoading(true);
     try {
-      const res = await fetch(`/api/payroll?month=${encodeURIComponent(selectedMonth)}`, {
-        credentials: "include",
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setPayrollData(Array.isArray(data) ? data : []);
-      }
+      const data = await payrollApi.getAll(selectedMonth);
+      setPayrollData(Array.isArray(data) ? data : []);
     } catch (err) {
     } finally {
       setLoading(false);
@@ -150,25 +125,14 @@ export default function Payroll() {
     try {
       // Update each payroll record
       for (const row of data) {
-        const res = await fetch(`/api/payroll/${row.emp_id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            month: selectedMonth,
-            basic_salary: row.basic_salary,
-            ot_amount: row.ot_amount,
-            food_allowance: row.food_allowance,
-            gross_salary: row.gross_salary,
-            deductions: row.deductions,
-            net_salary: row.net_salary,
-            comments: row.comments,
-          }),
+        await payrollApi.update(row.emp_id, selectedMonth, {
+          basic_salary: row.basic_salary,
+          ot_amount: row.ot_amount,
+          food_allowance: row.food_allowance,
+          gross_salary: row.gross_salary,
+          deductions: row.deductions,
+          net_salary: row.net_salary,
         });
-
-        if (!res.ok) {
-          throw new Error(`Failed to save payroll for ${row.emp_id}`);
-        }
       }
 
       if (!silent) alert("Payroll saved successfully");

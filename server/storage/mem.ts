@@ -120,6 +120,18 @@ export class MemStorage implements IStorage {
     return created;
   }
 
+  async updateAttendance(id: number, updates: Partial<InsertAttendance>): Promise<Attendance | undefined> {
+    const attendance = this.attendance.get(id);
+    if (!attendance) return undefined;
+    const updated = { ...attendance, ...updates };
+    this.attendance.set(id, updated);
+    return updated;
+  }
+
+  async deleteAttendance(id: number): Promise<boolean> {
+    return this.attendance.delete(id);
+  }
+
   async getPayroll(month?: string): Promise<Payroll[]> {
     const all = Array.from(this.payrolls.values());
     if (!month) return all;

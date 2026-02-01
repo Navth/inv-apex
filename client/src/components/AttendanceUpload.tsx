@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AttendancePreviewTable } from "@/components/AttendancePreviewTable";
 import { parseAttendanceFile } from "@/lib/attendanceParser";
 import type { AttendanceRecord } from "@/types/attendance";
+import { employeesApi } from "@/api/employees";
 // Note: We do not persist anything during upload; saving happens on Confirm.
 
 
@@ -28,11 +29,8 @@ export default function AttendanceUpload({ selectedMonth, onUpload }: Attendance
   useEffect(() => {
     async function loadEmployees() {
       try{
-        const res = await fetch("/api/employees", {credentials: "include"});
-        if (res.ok) {
-          const data = await res.json();
-          setEmployees(new Set(data.map((e: any) => e.emp_id)));
-      }
+        const data = await employeesApi.getAll();
+        setEmployees(new Set(data.map((e: any) => e.emp_id)));
     }
     catch (err){
     }

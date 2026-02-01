@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { employeesApi } from "@/api/employees";
 
 type AllowanceType = "per_day" | "fixed" | "none";
 
@@ -42,9 +43,7 @@ export default function Employees() {
 
   async function loadEmployees() {
     try {
-      const res = await fetch("/api/employees", { credentials: "include" });
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
+      const data = await employeesApi.getAll();
       
       const mapped: EmployeeRow[] = (data || []).map((e: any) => ({
         emp_id: e.emp_id,
@@ -87,11 +86,7 @@ export default function Employees() {
     if (!confirmed) return;
 
     try {
-      const res = await fetch(`/api/employees/${encodeURIComponent(empId)}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error(await res.text());
+      await employeesApi.delete(empId);
       alert("Employee deleted successfully");
       await loadEmployees();
     } catch (err) {
@@ -124,22 +119,10 @@ export default function Employees() {
 
     try {
       if (editingEmployee) {
-        const res = await fetch(`/api/employees/${encodeURIComponent(editingEmployee.emp_id)}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) throw new Error(await res.text());
+        await employeesApi.update(editingEmployee.emp_id, payload);
         alert("Employee updated successfully");
       } else {
-        const res = await fetch("/api/employees", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) throw new Error(await res.text());
+        await employeesApi.create(payload as any);
         alert("Employee created successfully");
       }
       await loadEmployees();

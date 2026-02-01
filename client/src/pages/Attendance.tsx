@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { apiRequest } from "@/lib/queryClient";
+import { attendanceApi } from "@/api/attendance";
 
 export default function Attendance() {
   const monthNames = [
@@ -53,7 +53,7 @@ export default function Attendance() {
         };
       });
 
-      await apiRequest("POST", "/api/attendance/bulk", payload);
+      await attendanceApi.bulkCreate(payload as any);
       alert("Attendance records saved successfully.");
       setUploaderKey((k) => k + 1);
     } catch (err) {

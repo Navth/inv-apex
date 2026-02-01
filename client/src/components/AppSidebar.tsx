@@ -14,6 +14,7 @@ import {
   LayoutDashboard,
   Users,
   Upload,
+  ClipboardList,
   DollarSign,
   FileText,
   Calendar,
@@ -37,6 +38,11 @@ const menuItems = [
     title: "Upload Attendance",
     url: "/attendance",
     icon: Upload,
+  },
+  {
+    title: "Manage Attendance",
+    url: "/attendance-management",
+    icon: ClipboardList,
   },
   {
     title: "Generate Payroll",

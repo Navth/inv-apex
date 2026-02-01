@@ -158,28 +158,24 @@ router.post("/generate", async (req, res) => {
     const employees = await storage.getEmployees();
     const attendances = await storage.getAttendance(month);
     
-    console.log(`Generating payroll for ${month}:`);
-    console.log(`- Found ${employees.length} employees`);
-    console.log(`- Found ${attendances.length} attendance records`);
-    
     // Generate payroll using the service
     const { payrolls, errors } = generatePayroll(employees, attendances, month);
     
-    // Log debug info for each employee (optional detailed logging)
-    for (const employee of employees) {
-      if (employee.status !== "active") continue;
-      
-      const empAttendances = attendances.filter(a => a.emp_id === employee.emp_id && a.month === month);
-      if (empAttendances.length === 0) continue;
-      
-      const aggregated = aggregateAttendance(empAttendances);
-      if (aggregated.workingDays === 0 || aggregated.actualPresentDays === 0) continue;
-      
-      const debugInfo = getPayrollDebugInfo(employee, aggregated, month);
-      logPayrollDebugInfo(debugInfo);
+    // Log debug info for each employee in development only
+    if (process.env.NODE_ENV !== 'production') {
+      for (const employee of employees) {
+        if (employee.status !== "active") continue;
+        
+        const empAttendances = attendances.filter(a => a.emp_id === employee.emp_id && a.month === month);
+        if (empAttendances.length === 0) continue;
+        
+        const aggregated = aggregateAttendance(empAttendances);
+        if (aggregated.workingDays === 0 || aggregated.actualPresentDays === 0) continue;
+        
+        const debugInfo = getPayrollDebugInfo(employee, aggregated, month);
+        logPayrollDebugInfo(debugInfo);
+      }
     }
-    
-    console.log(`Generated ${payrolls.length} payroll records`);
     
     if (payrolls.length === 0) {
       return res.status(400).json({ 
@@ -192,11 +188,9 @@ router.post("/generate", async (req, res) => {
     
     // Clear existing payroll for this month to avoid duplicates
     await storage.deletePayroll(month);
-    console.log(`Cleared existing payroll records for ${month}`);
 
     // Save payroll records
     const created = await storage.bulkCreatePayroll(payrolls);
-    console.log(`Successfully saved ${created.length} payroll records`);
     
     const response: any = { 
       created,

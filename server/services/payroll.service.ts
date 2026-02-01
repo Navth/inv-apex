@@ -453,9 +453,11 @@ export function getPayrollDebugInfo(
 }
 
 /**
- * Log payroll debug info to console
+ * Log payroll debug info to console (only in development)
  */
 export function logPayrollDebugInfo(info: PayrollDebugInfo): void {
+  if (process.env.NODE_ENV === 'production') return;
+  
   console.log(`\n${info.emp_id} (${info.name}):`);
   console.log(`  Month: ${info.month}`);
   console.log(`  Master Basic Salary: ${info.masterBasicSalary.toFixed(3)} KWD`);
