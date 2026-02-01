@@ -11,6 +11,8 @@ import type {
   InsertLeave,
   Indemnity,
   InsertIndemnity,
+  EmployeeSalaryHistory,
+  InsertEmployeeSalaryHistory,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -54,6 +56,14 @@ export interface IStorage {
   getIndemnityByEmployee(empId: string): Promise<Indemnity | undefined>;
   createIndemnity(indemnity: InsertIndemnity): Promise<Indemnity>;
   updateIndemnity(empId: string, indemnity: Partial<InsertIndemnity>): Promise<Indemnity | undefined>;
+
+  // Employee Salary History
+  getSalaryHistory(empId: string): Promise<EmployeeSalaryHistory[]>;
+  getSalaryForMonth(empId: string, month: string): Promise<EmployeeSalaryHistory | undefined>;
+  getAllSalariesForMonth(month: string): Promise<EmployeeSalaryHistory[]>;
+  createSalaryHistory(history: InsertEmployeeSalaryHistory): Promise<EmployeeSalaryHistory>;
+  updateSalaryHistory(id: number, updates: Partial<InsertEmployeeSalaryHistory>): Promise<EmployeeSalaryHistory | undefined>;
+  deleteSalaryHistory(id: number): Promise<boolean>;
 }
 
-export type { User, InsertUser, Employee, InsertEmployee, Attendance, InsertAttendance, Payroll, InsertPayroll, Leave, InsertLeave, Indemnity, InsertIndemnity };
+export type { User, InsertUser, Employee, InsertEmployee, Attendance, InsertAttendance, Payroll, InsertPayroll, Leave, InsertLeave, Indemnity, InsertIndemnity, EmployeeSalaryHistory, InsertEmployeeSalaryHistory };

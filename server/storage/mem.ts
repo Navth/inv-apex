@@ -12,6 +12,8 @@ import type {
   Leave,
   Payroll,
   User,
+  EmployeeSalaryHistory,
+  InsertEmployeeSalaryHistory,
 } from "@shared/schema";
 import type { IStorage } from "./types";
 
@@ -22,12 +24,14 @@ export class MemStorage implements IStorage {
   private payrolls: Map<number, Payroll> = new Map();
   private leaves: Map<number, Leave> = new Map();
   private indemnities: Map<string, Indemnity> = new Map();
+  private salaryHistory: Map<number, EmployeeSalaryHistory> = new Map();
 
   private employeeIdCounter = 1;
   private attendanceIdCounter = 1;
   private payrollIdCounter = 1;
   private leaveIdCounter = 1;
   private indemnityIdCounter = 1;
+  private salaryHistoryIdCounter = 1;
 
   async getUser(id: string): Promise<User | undefined> {
     return this.users.get(id);
@@ -247,5 +251,52 @@ export class MemStorage implements IStorage {
     const updated = { ...indemnity, ...updates, updated_at: new Date() };
     this.indemnities.set(empId, updated);
     return updated;
+  }
+
+  // Employee Salary History
+  async getSalaryHistory(empId: string): Promise<EmployeeSalaryHistory[]> {
+    return Array.from(this.salaryHistory.values())
+      .filter((h) => h.emp_id === empId)
+      .sort((a, b) => b.effective_month.localeCompare(a.effective_month));
+  }
+
+  async getSalaryForMonth(empId: string, month: string): Promise<EmployeeSalaryHistory | undefined> {
+    return Array.from(this.salaryHistory.values()).find(
+      (h) => h.emp_id === empId && h.effective_month === month
+    );
+  }
+
+  async getAllSalariesForMonth(month: string): Promise<EmployeeSalaryHistory[]> {
+    return Array.from(this.salaryHistory.values()).filter((h) => h.effective_month === month);
+  }
+
+  async createSalaryHistory(data: InsertEmployeeSalaryHistory): Promise<EmployeeSalaryHistory> {
+    const newHistory: EmployeeSalaryHistory = {
+      id: this.salaryHistoryIdCounter++,
+      other_allowance: "0",
+      food_allowance_amount: "0",
+      food_allowance_type: "none",
+      working_hours: 8,
+      ot_rate_normal: "0",
+      ot_rate_friday: "0",
+      ot_rate_holiday: "0",
+      notes: null,
+      ...data,
+      created_at: new Date(),
+    };
+    this.salaryHistory.set(newHistory.id, newHistory);
+    return newHistory;
+  }
+
+  async updateSalaryHistory(id: number, updates: Partial<InsertEmployeeSalaryHistory>): Promise<EmployeeSalaryHistory | undefined> {
+    const history = this.salaryHistory.get(id);
+    if (!history) return undefined;
+    const updated = { ...history, ...updates };
+    this.salaryHistory.set(id, updated);
+    return updated;
+  }
+
+  async deleteSalaryHistory(id: number): Promise<boolean> {
+    return this.salaryHistory.delete(id);
   }
 }

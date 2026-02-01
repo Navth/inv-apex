@@ -20,6 +20,7 @@ import {
   Calendar,
   Wallet,
   LogOut,
+  History,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
@@ -43,6 +44,11 @@ const menuItems = [
     title: "Manage Attendance",
     url: "/attendance-management",
     icon: ClipboardList,
+  },
+  {
+    title: "Salary History",
+    url: "/salary-history",
+    icon: History,
   },
   {
     title: "Generate Payroll",

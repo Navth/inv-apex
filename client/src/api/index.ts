@@ -12,8 +12,10 @@ export { payrollApi, getPayroll, getEmployeePayroll, updatePayroll, generatePayr
 export { leavesApi, getLeaves, getEmployeeLeaves, getLeave, createLeave, approveLeave, rejectLeave } from './leaves';
 export { indemnityApi, getIndemnity, getEmployeeIndemnity, calculateIndemnity, markIndemnityPaid } from './indemnity';
 export { reportsApi, getReport } from './reports';
+export { salaryHistoryApi } from './salaryHistory';
 
 // Type exports
 export type { LoginCredentials, LoginResponse, AuthCheckResponse } from './auth';
 export type { PayrollWithContext, PayrollGenerateResponse } from './payroll';
 export type { ReportRow } from './reports';
+export type { EmployeeSalaryHistory, CreateSalaryHistoryRequest, BulkCreateResponse } from './salaryHistory';

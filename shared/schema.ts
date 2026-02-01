@@ -114,3 +114,24 @@ export const indemnity = pgTable("indemnity", {
 export const insertIndemnitySchema = createInsertSchema(indemnity).omit({ id: true, updated_at: true, paid_at: true });
 export type InsertIndemnity = z.infer<typeof insertIndemnitySchema>;
 export type Indemnity = typeof indemnity.$inferSelect;
+
+// Employee Salary History - tracks salary changes over time for accurate historical reporting
+export const employeeSalaryHistory = pgTable("employee_salary_history", {
+  id: serial("id").primaryKey(),
+  emp_id: varchar("emp_id", { length: 50 }).notNull(),
+  basic_salary: decimal("basic_salary", { precision: 10, scale: 2 }).notNull(),
+  other_allowance: decimal("other_allowance", { precision: 10, scale: 2 }).notNull().default("0"),
+  food_allowance_amount: decimal("food_allowance_amount", { precision: 10, scale: 2 }).notNull().default("0"),
+  food_allowance_type: text("food_allowance_type").notNull().default("none"),
+  working_hours: integer("working_hours").notNull().default(8),
+  ot_rate_normal: decimal("ot_rate_normal", { precision: 10, scale: 2 }).notNull().default("0"),
+  ot_rate_friday: decimal("ot_rate_friday", { precision: 10, scale: 2 }).notNull().default("0"),
+  ot_rate_holiday: decimal("ot_rate_holiday", { precision: 10, scale: 2 }).notNull().default("0"),
+  effective_month: varchar("effective_month", { length: 7 }).notNull(), // MM-YYYY format
+  created_at: timestamp("created_at").notNull().defaultNow(),
+  notes: text("notes"), // Optional reason for change (e.g., "Annual increment", "Promotion")
+});
+
+export const insertEmployeeSalaryHistorySchema = createInsertSchema(employeeSalaryHistory).omit({ id: true, created_at: true });
+export type InsertEmployeeSalaryHistory = z.infer<typeof insertEmployeeSalaryHistorySchema>;
+export type EmployeeSalaryHistory = typeof employeeSalaryHistory.$inferSelect;

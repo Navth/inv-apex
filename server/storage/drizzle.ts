@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 import {
   users,
   employees,
@@ -6,6 +6,7 @@ import {
   payroll as payrollTable,
   leaves as leavesTable,
   indemnity as indemnityTable,
+  employeeSalaryHistory,
   type Attendance,
   type Employee,
   type Indemnity,
@@ -18,6 +19,8 @@ import {
   type Leave,
   type Payroll,
   type User,
+  type EmployeeSalaryHistory,
+  type InsertEmployeeSalaryHistory,
 } from "@shared/schema";
 import type { IStorage } from "./types";
 
@@ -177,5 +180,52 @@ export class DrizzleStorage implements IStorage {
   async updateIndemnity(empId: string, updates: Partial<InsertIndemnity>): Promise<Indemnity | undefined> {
     const rows = await this.db.update(indemnityTable).set(updates).where(eq(indemnityTable.emp_id, empId)).returning();
     return rows[0];
+  }
+
+  // Employee Salary History
+  async getSalaryHistory(empId: string): Promise<EmployeeSalaryHistory[]> {
+    return await this.db
+      .select()
+      .from(employeeSalaryHistory)
+      .where(eq(employeeSalaryHistory.emp_id, empId))
+      .orderBy(desc(employeeSalaryHistory.effective_month));
+  }
+
+  async getSalaryForMonth(empId: string, month: string): Promise<EmployeeSalaryHistory | undefined> {
+    const rows = await this.db
+      .select()
+      .from(employeeSalaryHistory)
+      .where(and(eq(employeeSalaryHistory.emp_id, empId), eq(employeeSalaryHistory.effective_month, month)))
+      .limit(1);
+    return rows[0];
+  }
+
+  async getAllSalariesForMonth(month: string): Promise<EmployeeSalaryHistory[]> {
+    return await this.db
+      .select()
+      .from(employeeSalaryHistory)
+      .where(eq(employeeSalaryHistory.effective_month, month));
+  }
+
+  async createSalaryHistory(data: InsertEmployeeSalaryHistory): Promise<EmployeeSalaryHistory> {
+    const rows = await this.db.insert(employeeSalaryHistory).values(data).returning();
+    return rows[0];
+  }
+
+  async updateSalaryHistory(id: number, updates: Partial<InsertEmployeeSalaryHistory>): Promise<EmployeeSalaryHistory | undefined> {
+    const rows = await this.db
+      .update(employeeSalaryHistory)
+      .set(updates)
+      .where(eq(employeeSalaryHistory.id, id))
+      .returning();
+    return rows[0];
+  }
+
+  async deleteSalaryHistory(id: number): Promise<boolean> {
+    const rows = await this.db
+      .delete(employeeSalaryHistory)
+      .where(eq(employeeSalaryHistory.id, id))
+      .returning({ id: employeeSalaryHistory.id });
+    return rows.length > 0;
   }
 }

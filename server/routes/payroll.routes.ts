@@ -4,7 +4,7 @@
 
 import { Router } from "express";
 import { storage } from "../storage";
-import type { Payroll, Attendance } from "@shared/schema";
+import type { Payroll, Attendance, Employee, EmployeeSalaryHistory } from "@shared/schema";
 import { 
   generatePayroll, 
   aggregateAttendance,
@@ -31,6 +31,35 @@ type PayrollWithContext = Payroll & {
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
+
+/**
+ * Apply salary history to employee data for historical accuracy
+ * If salary history exists for the month, use those values; otherwise use current employee values
+ */
+function applyHistoricalSalary(
+  employee: Employee, 
+  salaryHistoryMap: Map<string, EmployeeSalaryHistory>
+): Employee {
+  const history = salaryHistoryMap.get(employee.emp_id);
+  
+  if (!history) {
+    // No historical record, use current employee data
+    return employee;
+  }
+  
+  // Merge historical salary data with employee data
+  return {
+    ...employee,
+    basic_salary: history.basic_salary,
+    other_allowance: history.other_allowance,
+    food_allowance_amount: history.food_allowance_amount,
+    food_allowance_type: history.food_allowance_type,
+    working_hours: history.working_hours,
+    ot_rate_normal: history.ot_rate_normal,
+    ot_rate_friday: history.ot_rate_friday,
+    ot_rate_holiday: history.ot_rate_holiday,
+  };
+}
 
 /**
  * Enrich payroll records with additional context from employees and attendance
@@ -148,7 +177,7 @@ router.patch("/:empId", async (req, res) => {
  */
 router.post("/generate", async (req, res) => {
   try {
-    const { month } = req.body;
+    const { month, useHistoricalSalary = true } = req.body;
     
     if (!month) {
       return res.status(400).json({ error: "Month is required" });
@@ -158,12 +187,41 @@ router.post("/generate", async (req, res) => {
     const employees = await storage.getEmployees();
     const attendances = await storage.getAttendance(month);
     
+    // Fetch salary history for the month (if using historical salary)
+    let employeesWithSalary = employees;
+    let usedHistoricalSalary = false;
+    
+    if (useHistoricalSalary) {
+      const salaryHistory = await storage.getAllSalariesForMonth(month);
+      
+      if (salaryHistory.length > 0) {
+        // Create a map of emp_id to salary history
+        const salaryHistoryMap = new Map(
+          salaryHistory.map(s => [s.emp_id, s])
+        );
+        
+        // Apply historical salary to employees
+        employeesWithSalary = employees.map(emp => 
+          applyHistoricalSalary(emp, salaryHistoryMap)
+        );
+        usedHistoricalSalary = true;
+        
+        if (process.env.NODE_ENV !== 'production') {
+          console.log(`[Payroll] Using historical salary data for ${salaryHistory.length} employees`);
+        }
+      } else {
+        if (process.env.NODE_ENV !== 'production') {
+          console.log(`[Payroll] No historical salary data found for ${month}, using current employee salaries`);
+        }
+      }
+    }
+    
     // Generate payroll using the service
-    const { payrolls, errors } = generatePayroll(employees, attendances, month);
+    const { payrolls, errors } = generatePayroll(employeesWithSalary, attendances, month);
     
     // Log debug info for each employee in development only
     if (process.env.NODE_ENV !== 'production') {
-      for (const employee of employees) {
+      for (const employee of employeesWithSalary) {
         if (employee.status !== "active") continue;
         
         const empAttendances = attendances.filter(a => a.emp_id === employee.emp_id && a.month === month);
@@ -195,12 +253,17 @@ router.post("/generate", async (req, res) => {
     const response: any = { 
       created,
       count: created.length,
-      message: `Payroll generated for ${created.length} employee(s)`
+      message: `Payroll generated for ${created.length} employee(s)`,
+      usedHistoricalSalary,
     };
     
     if (errors.length > 0) {
       response.warnings = errors;
       response.message += `. ${errors.length} employee(s) skipped due to missing attendance.`;
+    }
+    
+    if (usedHistoricalSalary) {
+      response.message += ' (Using historical salary data)';
     }
     
     res.json(response);
