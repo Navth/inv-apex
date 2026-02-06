@@ -8,6 +8,7 @@ vite.config.ts.*
 *.log
 .env.example
 migrations/
+.env.railway.example
 
 /client/src/scripts/
 docs/PAYROLL_CALCULATION.md
