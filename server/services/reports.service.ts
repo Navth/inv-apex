@@ -63,8 +63,11 @@ function calculateProratedAmount(monthlyAmount: number, workedDays: number): num
   return (monthlyAmount / KUWAIT_WORKING_DAYS_PER_MONTH) * workedDays;
 }
 
-function isRehabIndirect(employee: Employee): boolean {
-  return employee.department?.toLowerCase() === 'rehab' && 
+type EmployeeWithDeptName = Employee & { department_name?: string };
+
+function isRehabIndirect(employee: EmployeeWithDeptName): boolean {
+  const deptName = employee.department_name ?? (employee as any).department;
+  return String(deptName || '').toLowerCase() === 'rehab' && 
          employee.category?.toLowerCase() === 'indirect';
 }
 
@@ -185,7 +188,7 @@ export function generateMonthlyReport(
       emp_id: employee.emp_id,
       name: employee.name,
       designation: employee.designation,
-      department: employee.department,
+      department: (employee as EmployeeWithDeptName).department_name ?? (employee as any).department ?? "",
       salary: master_basic_salary,
       worked_days,
       working_days,

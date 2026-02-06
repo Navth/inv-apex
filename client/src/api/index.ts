@@ -7,6 +7,7 @@
 export { api, APIError } from './client';
 export { authApi, login, logout, checkAuth } from './auth';
 export { employeesApi, getEmployees, getEmployee, createEmployee, updateEmployee, deleteEmployee, bulkCreateEmployees } from './employees';
+export { deptApi, getDepts, createDept, updateDept, deleteDept } from './dept';
 export { attendanceApi, getAttendance, getEmployeeAttendance, createAttendance, bulkCreateAttendance } from './attendance';
 export { payrollApi, getPayroll, getEmployeePayroll, updatePayroll, generatePayroll } from './payroll';
 export { leavesApi, getLeaves, getEmployeeLeaves, getLeave, createLeave, approveLeave, rejectLeave } from './leaves';

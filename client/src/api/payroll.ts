@@ -26,12 +26,14 @@ export interface PayrollGenerateResponse {
 }
 
 /**
- * Get payroll records, optionally filtered by month
+ * Get payroll records, optionally filtered by month and/or dept_id
  */
-export async function getPayroll(month?: string): Promise<PayrollWithContext[]> {
-  const url = month 
-    ? `/api/payroll?month=${encodeURIComponent(month)}`
-    : '/api/payroll';
+export async function getPayroll(month?: string, deptId?: number | null): Promise<PayrollWithContext[]> {
+  const params = new URLSearchParams();
+  if (month) params.set('month', month);
+  if (deptId != null) params.set('dept_id', String(deptId));
+  const qs = params.toString();
+  const url = qs ? `/api/payroll?${qs}` : '/api/payroll';
   return api.get<PayrollWithContext[]>(url);
 }
 
@@ -60,10 +62,15 @@ export async function updatePayroll(
 }
 
 /**
- * Generate payroll for a given month
+ * Generate payroll for a given month. Pass dept_id to generate only for that department; omit for everyone.
  */
-export async function generatePayroll(month: string): Promise<PayrollGenerateResponse> {
-  return api.post<PayrollGenerateResponse>('/api/payroll/generate', { month });
+export async function generatePayroll(
+  month: string,
+  options?: { dept_id?: number | null }
+): Promise<PayrollGenerateResponse> {
+  const body: { month: string; dept_id?: number } = { month };
+  if (options?.dept_id != null) body.dept_id = options.dept_id;
+  return api.post<PayrollGenerateResponse>('/api/payroll/generate', body);
 }
 
 export const payrollApi = {

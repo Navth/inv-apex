@@ -91,11 +91,15 @@ function calculateProratedAmount(monthlyAmount: number, workedDays: number): num
   return (monthlyAmount / KUWAIT_WORKING_DAYS_PER_MONTH) * workedDays;
 }
 
+/** Employee with optional department name (from join) */
+type EmployeeWithDeptName = Employee & { department_name?: string };
+
 /**
  * Check if employee is a Rehab department indirect employee
  */
-function isRehabIndirect(employee: Employee): boolean {
-  return employee.department?.toLowerCase() === 'rehab' && 
+function isRehabIndirect(employee: EmployeeWithDeptName): boolean {
+  const deptName = employee.department_name ?? (employee as any).department;
+  return String(deptName || '').toLowerCase() === 'rehab' && 
          employee.category?.toLowerCase() === 'indirect';
 }
 

@@ -120,12 +120,13 @@ async function enrichPayrollRows(payroll: Payroll[], month?: string): Promise<Pa
 
 /**
  * GET /api/payroll
- * Get payroll records, optionally filtered by month
+ * Get payroll records, optionally filtered by month and/or dept_id
  */
 router.get("/", async (req, res) => {
   try {
     const month = req.query.month as string | undefined;
-    const payroll = await storage.getPayroll(month);
+    const deptId = req.query.dept_id != null ? parseInt(String(req.query.dept_id), 10) : undefined;
+    const payroll = await storage.getPayroll(month, isNaN(deptId!) ? undefined : deptId);
     const enriched = await enrichPayrollRows(payroll, month);
     res.json(enriched);
   } catch (error) {
@@ -173,37 +174,46 @@ router.patch("/:empId", async (req, res) => {
 
 /**
  * POST /api/payroll/generate
- * Generate payroll for all active employees for a given month
+ * Generate payroll for a given month. Optional dept_id: generate only for that department; otherwise everyone.
  */
 router.post("/generate", async (req, res) => {
   try {
-    const { month, useHistoricalSalary = true } = req.body;
+    const { month, useHistoricalSalary = true, dept_id: deptId } = req.body;
     
     if (!month) {
       return res.status(400).json({ error: "Month is required" });
     }
     
-    // Fetch all required data
-    const employees = await storage.getEmployees();
-    const attendances = await storage.getAttendance(month);
+    const deptIdNum = deptId != null ? parseInt(String(deptId), 10) : undefined;
+    const forDeptOnly = deptIdNum != null && !isNaN(deptIdNum);
+    
+    // Fetch employees (and optionally filter by department)
+    let employeesWithDept = await storage.getEmployeesWithDeptName();
+    if (forDeptOnly) {
+      const deptEmployees = await storage.getEmployeesByDept(deptIdNum);
+      const deptEmpIds = new Set(deptEmployees.map((e) => e.emp_id));
+      employeesWithDept = employeesWithDept.filter((e) => deptEmpIds.has(e.emp_id));
+    }
+    
+    const attendances = forDeptOnly
+      ? await storage.getAttendance(month, deptIdNum)
+      : await storage.getAttendance(month);
     
     // Fetch salary history for the month (if using historical salary)
-    let employeesWithSalary = employees;
+    let employeesWithSalary = employeesWithDept;
     let usedHistoricalSalary = false;
     
     if (useHistoricalSalary) {
       const salaryHistory = await storage.getAllSalariesForMonth(month);
       
       if (salaryHistory.length > 0) {
-        // Create a map of emp_id to salary history
         const salaryHistoryMap = new Map(
           salaryHistory.map(s => [s.emp_id, s])
         );
-        
-        // Apply historical salary to employees
-        employeesWithSalary = employees.map(emp => 
-          applyHistoricalSalary(emp, salaryHistoryMap)
-        );
+        employeesWithSalary = employeesWithDept.map(emp => ({
+          ...applyHistoricalSalary(emp, salaryHistoryMap),
+          department_name: emp.department_name,
+        }));
         usedHistoricalSalary = true;
         
         if (process.env.NODE_ENV !== 'production') {
@@ -216,20 +226,15 @@ router.post("/generate", async (req, res) => {
       }
     }
     
-    // Generate payroll using the service
     const { payrolls, errors } = generatePayroll(employeesWithSalary, attendances, month);
     
-    // Log debug info for each employee in development only
     if (process.env.NODE_ENV !== 'production') {
       for (const employee of employeesWithSalary) {
         if (employee.status !== "active") continue;
-        
         const empAttendances = attendances.filter(a => a.emp_id === employee.emp_id && a.month === month);
         if (empAttendances.length === 0) continue;
-        
         const aggregated = aggregateAttendance(empAttendances);
         if (aggregated.workingDays === 0 || aggregated.actualPresentDays === 0) continue;
-        
         const debugInfo = getPayrollDebugInfo(employee, aggregated, month);
         logPayrollDebugInfo(debugInfo);
       }
@@ -238,22 +243,29 @@ router.post("/generate", async (req, res) => {
     if (payrolls.length === 0) {
       return res.status(400).json({ 
         error: "No payroll generated", 
-        message: "No active employees with attendance found",
+        message: forDeptOnly
+          ? "No active employees with attendance found in the selected department."
+          : "No active employees with attendance found",
         warnings: errors,
         created: [] 
       });
     }
     
-    // Clear existing payroll for this month to avoid duplicates
-    await storage.deletePayroll(month);
-
-    // Save payroll records
+    if (forDeptOnly) {
+      const deptEmpIds = employeesWithDept.map((e) => e.emp_id);
+      await storage.deletePayrollForEmployees(month, deptEmpIds);
+    } else {
+      await storage.deletePayroll(month);
+    }
+    
     const created = await storage.bulkCreatePayroll(payrolls);
     
     const response: any = { 
       created,
       count: created.length,
-      message: `Payroll generated for ${created.length} employee(s)`,
+      message: forDeptOnly
+        ? `Payroll generated for ${created.length} employee(s) in selected department`
+        : `Payroll generated for ${created.length} employee(s)`,
       usedHistoricalSalary,
     };
     

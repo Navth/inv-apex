@@ -61,9 +61,9 @@ export default function DashboardStats() {
           0,
         );
 
-        // Distinct departments from employees (schema has department)
+        // Distinct departments from employees (API returns department_name)
         const departments = Array.from(
-          new Set((employees || []).map((e: any) => e.department).filter(Boolean)),
+          new Set((employees || []).map((e: any) => e.department_name ?? e.department).filter(Boolean)),
         ).length;
 
         // Attendance for current month to compute rate

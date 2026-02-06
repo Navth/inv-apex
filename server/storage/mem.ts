@@ -136,10 +136,16 @@ export class MemStorage implements IStorage {
     return this.attendance.delete(id);
   }
 
-  async getPayroll(month?: string): Promise<Payroll[]> {
-    const all = Array.from(this.payrolls.values());
-    if (!month) return all;
-    return all.filter((p) => p.month === month);
+  async getPayroll(month?: string, deptId?: number): Promise<Payroll[]> {
+    let all = Array.from(this.payrolls.values());
+    if (month) all = all.filter((p) => p.month === month);
+    if (deptId != null) {
+      const deptEmpIds = new Set(
+        Array.from(this.employees.values()).filter((e) => (e as any).dept_id === deptId).map((e) => e.emp_id)
+      );
+      all = all.filter((p) => deptEmpIds.has(p.emp_id));
+    }
+    return all;
   }
 
   async getPayrollByEmployee(empId: string, month?: string): Promise<Payroll[]> {
@@ -184,6 +190,16 @@ export class MemStorage implements IStorage {
   async deletePayroll(month: string): Promise<void> {
     const toDelete = Array.from(this.payrolls.entries())
       .filter(([, p]) => p.month === month)
+      .map(([id]) => id);
+    for (const id of toDelete) {
+      this.payrolls.delete(id);
+    }
+  }
+
+  async deletePayrollForEmployees(month: string, empIds: string[]): Promise<void> {
+    const empSet = new Set(empIds);
+    const toDelete = Array.from(this.payrolls.entries())
+      .filter(([, p]) => p.month === month && empSet.has(p.emp_id))
       .map(([id]) => id);
     for (const id of toDelete) {
       this.payrolls.delete(id);

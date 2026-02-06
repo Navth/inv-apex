@@ -13,12 +13,12 @@ import { employeesApi } from "@/api/employees";
 
 type AllowanceType = "per_day" | "fixed" | "none";
 
-// FIXED: Ensure all properties are properly typed and optional where needed
 interface EmployeeRow {
   emp_id: string;
   name: string;
   designation: string;
   department: string;
+  dept_id: number;
   category: string;
   civil_id?: string | null;
   doj: string;
@@ -30,8 +30,8 @@ interface EmployeeRow {
   food_allowance_amount: number;
   working_hours: number;
   indemnity_rate: number;
-  status: string; // ✅ Explicitly required
-  ot_rate_normal?: number; // ✅ Added missing OT fields
+  status: string;
+  ot_rate_normal?: number;
   ot_rate_friday?: number;
   ot_rate_holiday?: number;
 }
@@ -49,7 +49,8 @@ export default function Employees() {
         emp_id: e.emp_id,
         name: e.name,
         designation: e.designation,
-        department: e.department || "General",
+        department: e.department_name ?? e.department ?? "General",
+        dept_id: e.dept_id ?? 0,
         category: e.category || "Direct",
         civil_id: e.civil_id || null,
         doj: e.doj,
@@ -99,7 +100,7 @@ export default function Employees() {
       emp_id: data.emp_id,
       name: data.name,
       designation: data.designation,
-      department: data.department || "General", // ✅ FIXED: was data.project
+      dept_id: data.dept_id,
       category: data.category || "Direct",
       civil_id: data.civil_id?.trim() || null,
       doj: data.doj,
@@ -138,7 +139,7 @@ export default function Employees() {
     emp_id: editingEmployee.emp_id,
     name: editingEmployee.name,
     designation: editingEmployee.designation,
-    department: editingEmployee.department,
+    dept_id: editingEmployee.dept_id,
     category: editingEmployee.category,
     civil_id: editingEmployee.civil_id || "",
     doj: editingEmployee.doj,

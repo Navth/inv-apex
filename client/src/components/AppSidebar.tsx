@@ -21,6 +21,7 @@ import {
   Wallet,
   LogOut,
   History,
+  Building2,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
@@ -69,6 +70,11 @@ const menuItems = [
     title: "Reports",
     url: "/reports",
     icon: FileText,
+  },
+  {
+    title: "Departments",
+    url: "/departments",
+    icon: Building2,
   },
 ];
 

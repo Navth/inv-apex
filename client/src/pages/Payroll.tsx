@@ -12,6 +12,8 @@ import {
 import { Calculator, RefreshCw } from "lucide-react";
 import * as XLSX from "xlsx";
 import { payrollApi } from "@/api/payroll";
+import { deptApi } from "@/api/dept";
+import type { Dept } from "@shared/schema";
 
 export default function Payroll() {
   const monthNames = [
@@ -28,9 +30,15 @@ export default function Payroll() {
 
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [selectedMonthNum, setSelectedMonthNum] = useState<number>(currentMonth);
+  const [selectedDeptId, setSelectedDeptId] = useState<number | null>(null);
+  const [depts, setDepts] = useState<Dept[]>([]);
   const [payrollData, setPayrollData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [calculating, setCalculating] = useState(false);
+
+  useEffect(() => {
+    deptApi.getAll().then((d) => setDepts(d ?? []));
+  }, []);
 
   // Computed value for the combined month string (MM-YYYY format)
   const selectedMonth = `${String(selectedMonthNum).padStart(2, "0")}-${selectedYear}`;
@@ -42,14 +50,14 @@ export default function Payroll() {
     return `${monthNames[monthIndex]} ${yyyy}`;
   }
 
-  // Fetch payroll data when selectedMonth changes
+  // Fetch payroll data when selectedMonth or selectedDeptId changes
   useEffect(() => {
     if (!selectedMonth) return;
 
     async function fetchPayroll() {
       setLoading(true);
       try {
-        const data = await payrollApi.getAll(selectedMonth);
+        const data = await payrollApi.getAll(selectedMonth, selectedDeptId);
         setPayrollData(Array.isArray(data) ? data : []);
       } catch (err) {
         setPayrollData([]);
@@ -59,7 +67,7 @@ export default function Payroll() {
     }
 
     fetchPayroll();
-  }, [selectedMonth]);
+  }, [selectedMonth, selectedDeptId]);
 
   // Calculate payroll for selected month
   async function handleCalculate() {
@@ -72,14 +80,15 @@ export default function Payroll() {
     
     }
 
+    const deptLabel = selectedDeptId != null ? depts.find((d) => d.id === selectedDeptId)?.name ?? "selected department" : "all employees";
     const confirmed = window.confirm(
-      `Generate payroll for ${formatMonthLabel(selectedMonth)}? This will calculate salary based on attendance data.`
+      `Generate payroll for ${formatMonthLabel(selectedMonth)}${selectedDeptId != null ? ` (${deptLabel} only)` : ""}? This will calculate salary based on attendance data.`
     );
     if (!confirmed) return;
 
     setCalculating(true);
     try {
-      const result = await payrollApi.generate(selectedMonth);
+      const result = await payrollApi.generate(selectedMonth, { dept_id: selectedDeptId ?? undefined });
       
       // Show detailed message
       let message = result.message || `Payroll generated successfully for ${result.count || 0} employees`;
@@ -94,7 +103,7 @@ export default function Payroll() {
       alert(message);
       
       // Refresh payroll data
-      const data = await payrollApi.getAll(selectedMonth);
+      const data = await payrollApi.getAll(selectedMonth, selectedDeptId);
       setPayrollData(Array.isArray(data) ? data : []);
     } catch (err) {
       alert(`Failed to generate payroll: ${err instanceof Error ? err.message : "Unknown error"}`);
@@ -109,7 +118,7 @@ export default function Payroll() {
     
     setLoading(true);
     try {
-      const data = await payrollApi.getAll(selectedMonth);
+      const data = await payrollApi.getAll(selectedMonth, selectedDeptId);
       setPayrollData(Array.isArray(data) ? data : []);
     } catch (err) {
     } finally {
@@ -249,6 +258,32 @@ export default function Payroll() {
             </SelectContent>
           </Select>
         </div>
+
+        <div className="flex-1 min-w-[160px]">
+          <Label htmlFor="payroll-dept" className="text-sm font-medium mb-2 block">
+            Department
+          </Label>
+          <Select 
+            value={selectedDeptId != null ? selectedDeptId.toString() : "all"} 
+            onValueChange={(val) => setSelectedDeptId(val === "all" ? null : parseInt(val, 10))}
+          >
+            <SelectTrigger id="payroll-dept" className="h-10">
+              <SelectValue placeholder="Department" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Everyone</SelectItem>
+              {depts.map((d) => (
+                <SelectItem key={d.id} value={d.id.toString()}>
+                  {d.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground mt-1">
+            Generate for one department or everyone
+          </p>
+        </div>
+
         <Button
           onClick={handleCalculate}
           data-testid="button-calculate"

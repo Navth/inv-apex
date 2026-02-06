@@ -8,6 +8,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 
 import authRoutes from "./auth.routes";
+import deptRoutes from "./dept.routes";
 import employeeRoutes from "./employee.routes";
 import attendanceRoutes from "./attendance.routes";
 import payrollRoutes from "./payroll.routes";
@@ -24,6 +25,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use("/api", authRoutes);
   
   // Resource routes
+  app.use("/api/dept", deptRoutes);
   app.use("/api/employees", employeeRoutes);
   app.use("/api/attendance", attendanceRoutes);
   app.use("/api/payroll", payrollRoutes);

@@ -11,11 +11,11 @@ const router = Router();
 
 /**
  * GET /api/employees
- * Get all employees
+ * Get all employees (with department_name for display)
  */
 router.get("/", async (req, res) => {
   try {
-    const employees = await storage.getEmployees();
+    const employees = await storage.getEmployeesWithDeptName();
     res.json(employees);
   } catch (error) {
     console.error("/api/employees error:", error);
@@ -25,7 +25,7 @@ router.get("/", async (req, res) => {
 
 /**
  * GET /api/employees/:empId
- * Get single employee by ID
+ * Get single employee by ID (with department_name)
  */
 router.get("/:empId", async (req, res) => {
   try {
@@ -33,7 +33,8 @@ router.get("/:empId", async (req, res) => {
     if (!employee) {
       return res.status(404).json({ error: "Employee not found" });
     }
-    res.json(employee);
+    const dept = await storage.getDept(employee.dept_id);
+    res.json({ ...employee, department_name: dept?.name ?? "" });
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch employee" });
   }
@@ -58,26 +59,34 @@ router.post("/", async (req, res) => {
 
 /**
  * POST /api/employees/bulk
- * Bulk create employees
+ * Bulk create employees (raw.department = department name; resolved to dept_id)
  */
 router.post("/bulk", async (req, res) => {
   try {
-    const { employees } = req.body;
-    if (!Array.isArray(employees) || employees.length === 0) {
+    const { employees: employeesRaw } = req.body;
+    if (!Array.isArray(employeesRaw) || employeesRaw.length === 0) {
       return res.status(400).json({ error: "employees array is required" });
+    }
+
+    const depts = await storage.getDepts();
+    const deptByName = new Map(depts.map((d) => [d.name, d.id]));
+    const defaultDeptId = deptByName.get("General") ?? depts[0]?.id;
+    if (defaultDeptId == null) {
+      return res.status(400).json({ error: "No departments found. Create at least one department first." });
     }
 
     const created: any[] = [];
 
-    for (let index = 0; index < employees.length; index++) {
-      const raw = employees[index];
+    for (let index = 0; index < employeesRaw.length; index++) {
+      const raw = employeesRaw[index];
       try {
+        const deptId = raw.dept_id ?? deptByName.get(String(raw.department).trim()) ?? defaultDeptId;
         const payload = {
           emp_id: String(raw.emp_id),
           name: raw.name,
           civil_id: raw.civil_id || null,
           designation: raw.designation,
-          department: raw.department,
+          dept_id: deptId,
           category: raw.category || "Direct",
           doj: raw.doj,
           internal_department_doj: raw.internal_department_doj || null,
@@ -94,7 +103,6 @@ router.post("/bulk", async (req, res) => {
           status: "active",
         };
 
-        console.log("Row", index, "payload:", payload);
         const data = insertEmployeeSchema.parse(payload);
         const employee = await storage.createEmployee(data);
         created.push(employee);

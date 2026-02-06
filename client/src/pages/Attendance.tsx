@@ -9,6 +9,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { attendanceApi } from "@/api/attendance";
+import { deptApi } from "@/api/dept";
+import type { Dept } from "@shared/schema";
 
 export default function Attendance() {
   const monthNames = [
@@ -25,7 +27,13 @@ export default function Attendance() {
 
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [selectedMonthNum, setSelectedMonthNum] = useState<number>(currentMonth);
+  const [selectedDeptId, setSelectedDeptId] = useState<number | null>(null);
+  const [depts, setDepts] = useState<Dept[]>([]);
   const [uploaderKey, setUploaderKey] = useState(0);
+
+  useEffect(() => {
+    deptApi.getAll().then((d) => setDepts(d ?? []));
+  }, []);
 
   // Computed value for the combined month string (MM-YYYY format)
   const selectedMonth = `${String(selectedMonthNum).padStart(2, "0")}-${selectedYear}`;
@@ -53,11 +61,12 @@ export default function Attendance() {
         };
       });
 
-      await attendanceApi.bulkCreate(payload as any);
+      const options = selectedDeptId != null ? { dept_id: selectedDeptId, month: selectedMonth } : undefined;
+      await attendanceApi.bulkCreate(payload as any, options);
       alert("Attendance records saved successfully.");
       setUploaderKey((k) => k + 1);
     } catch (err) {
-      alert("Failed to save attendance records.");
+      alert((err as Error).message || "Failed to save attendance records.");
     }
   };
 
@@ -70,10 +79,10 @@ export default function Attendance() {
         </p>
       </div>
 
-      <div className="flex gap-4 max-w-md">
-        <div className="flex-1">
+      <div className="flex flex-wrap gap-4 max-w-3xl">
+        <div className="flex-1 min-w-[140px]">
           <Label htmlFor="year" className="text-sm font-medium mb-2 block">
-            Select Year
+            Year
           </Label>
           <Select 
             value={selectedYear.toString()} 
@@ -92,9 +101,9 @@ export default function Attendance() {
           </Select>
         </div>
 
-        <div className="flex-1">
+        <div className="flex-1 min-w-[140px]">
           <Label htmlFor="month" className="text-sm font-medium mb-2 block">
-            Select Month
+            Month
           </Label>
           <Select 
             value={selectedMonthNum.toString()} 
@@ -111,6 +120,31 @@ export default function Attendance() {
               ))}
             </SelectContent>
           </Select>
+        </div>
+
+        <div className="flex-1 min-w-[180px]">
+          <Label htmlFor="dept" className="text-sm font-medium mb-2 block">
+            Department
+          </Label>
+          <Select 
+            value={selectedDeptId != null ? selectedDeptId.toString() : "all"} 
+            onValueChange={(val) => setSelectedDeptId(val === "all" ? null : parseInt(val, 10))}
+          >
+            <SelectTrigger id="dept" className="h-10">
+              <SelectValue placeholder="Select department" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All (no dept filter)</SelectItem>
+              {depts.map((d) => (
+                <SelectItem key={d.id} value={d.id.toString()}>
+                  {d.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground mt-1">
+            Select a department to upload only that dept’s attendance for this month; existing records for that dept will be replaced.
+          </p>
         </div>
       </div>
 

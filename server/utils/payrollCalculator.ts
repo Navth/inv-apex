@@ -142,7 +142,8 @@ export function calculateOvertimeAmount(
   let holidayPay = otHoursHoliday * holidayOtRate;
   
   // Special rule: Rehab department indirect employees get 70% of OT pay
-  const isRehabIndirect = employee.department?.toLowerCase() === 'rehab' && 
+  const deptName = (employee as { department_name?: string; department?: string }).department_name ?? (employee as any).department;
+  const isRehabIndirect = String(deptName || '').toLowerCase() === 'rehab' && 
                           employee.category?.toLowerCase() === 'indirect';
   
   if (isRehabIndirect) {

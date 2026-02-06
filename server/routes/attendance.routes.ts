@@ -11,12 +11,13 @@ const router = Router();
 
 /**
  * GET /api/attendance
- * Get all attendance records, optionally filtered by month
+ * Get all attendance records, optionally filtered by month and/or dept_id
  */
 router.get("/", async (req, res) => {
   try {
     const month = req.query.month as string | undefined;
-    const attendance = await storage.getAttendance(month);
+    const deptId = req.query.dept_id != null ? parseInt(String(req.query.dept_id), 10) : undefined;
+    const attendance = await storage.getAttendance(month, isNaN(deptId!) ? undefined : deptId);
     res.json(attendance);
   } catch (error) {
     console.error("/api/attendance error:", error);
@@ -57,24 +58,52 @@ router.post("/", async (req, res) => {
 
 /**
  * POST /api/attendance/bulk
- * Bulk create attendance records
+ * Bulk create attendance records.
+ * Body: array of attendance records, OR { dept_id, month, attendances } to upload by department.
+ * When dept_id is provided: only employees in that dept are allowed; existing attendance for that month for those employees is replaced.
  */
 router.post("/bulk", async (req, res) => {
   try {
-    const attendances = z.array(insertAttendanceSchema).parse(req.body);
+    let attendances: z.infer<typeof insertAttendanceSchema>[];
+    const body = req.body;
 
-    // Validate employee IDs
+    if (Array.isArray(body)) {
+      attendances = z.array(insertAttendanceSchema).parse(body);
+    } else if (body && body.attendances && body.month && body.dept_id != null) {
+      const deptId = parseInt(String(body.dept_id), 10);
+      const month = String(body.month);
+      if (isNaN(deptId)) {
+        return res.status(400).json({ error: "Invalid dept_id" });
+      }
+      attendances = z.array(insertAttendanceSchema).parse(body.attendances);
+      // All records must be for the same month
+      const badMonth = attendances.find((a) => a.month !== month);
+      if (badMonth) {
+        return res.status(400).json({ error: "All attendance records must have month equal to " + month });
+      }
+      const employeesInDept = await storage.getEmployeesByDept(deptId);
+      const allowedEmpIds = new Set(employeesInDept.map((e) => e.emp_id));
+      const invalid = attendances.filter((a) => !allowedEmpIds.has(a.emp_id));
+      if (invalid.length > 0) {
+        return res.status(400).json({
+          error: "Some employee IDs are not in the selected department",
+          invalidIds: invalid.map((r) => r.emp_id),
+        });
+      }
+      const empIds = [...new Set(attendances.map((a) => a.emp_id))];
+      await storage.deleteAttendanceByMonthAndEmpIds(month, empIds);
+    } else {
+      return res.status(400).json({ error: "Body must be an array of attendance records or { dept_id, month, attendances }" });
+    }
+
+    // Validate employee IDs exist
     const employees = await storage.getEmployees();
-    const validEmpIds = new Set(employees.map(e => e.emp_id));
-    
-    const invalidEmpIds = attendances.filter(a => !validEmpIds.has(a.emp_id));
-
+    const validEmpIds = new Set(employees.map((e) => e.emp_id));
+    const invalidEmpIds = attendances.filter((a) => !validEmpIds.has(a.emp_id));
     if (invalidEmpIds.length > 0) {
-      const invalidIds = invalidEmpIds.map(r => r.emp_id).join(", ");
       return res.status(400).json({
         error: "Invalid employee IDs in attendance upload",
-        invalidIds,
-        message: `The following employee IDs are invalid: ${invalidIds}`
+        invalidIds: invalidEmpIds.map((r) => r.emp_id).join(", "),
       });
     }
 
@@ -84,13 +113,12 @@ router.post("/bulk", async (req, res) => {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: error.errors });
     }
-    
     console.error("Attendance bulk upload error:", error);
-    const body: any = { error: "Failed to upload attendance" };
+    const resBody: any = { error: "Failed to upload attendance" };
     if (process.env.NODE_ENV === "development") {
-      body.details = (error instanceof Error && error.message) ? error.message : String(error);
+      resBody.details = (error instanceof Error && error.message) ? error.message : String(error);
     }
-    res.status(500).json(body);
+    res.status(500).json(resBody);
   }
 });
 

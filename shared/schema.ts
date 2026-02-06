@@ -17,6 +17,16 @@ export const insertUserSchema = createInsertSchema(users).pick({
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
+// Departments - referenced by employees
+export const dept = pgTable("dept", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull().unique(),
+});
+
+export const insertDeptSchema = createInsertSchema(dept).omit({ id: true });
+export type InsertDept = z.infer<typeof insertDeptSchema>;
+export type Dept = typeof dept.$inferSelect;
+
 export const employees = pgTable("employees", {
   emp_id: varchar("emp_id", { length: 50 }).primaryKey(),
   name: text("name").notNull(),
@@ -25,7 +35,7 @@ export const employees = pgTable("employees", {
   basic_salary: decimal("basic_salary", { precision: 10, scale: 2 }).notNull(),
   food_allowance_amount: decimal("food_allowance_amount", { precision: 10, scale: 2 }).notNull().default("0"),
   other_allowance: decimal("other_allowance", { precision: 10, scale: 2 }).notNull().default("0"),
-  department: text("department").notNull(),
+  dept_id: integer("dept_id").notNull().references(() => dept.id),
   doj: date("doj").notNull(),
   internal_department_doj: date("internal_department_doj"),
   five_year_calc_date: date("five_year_calc_date"),

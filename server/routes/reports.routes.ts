@@ -21,7 +21,7 @@ router.get("/", async (req, res) => {
     }
 
     const [employees, monthAttendance, monthPayroll] = await Promise.all([
-      storage.getEmployees(),
+      storage.getEmployeesWithDeptName(),
       storage.getAttendance(month),
       storage.getPayroll(month),
     ]);

@@ -1,6 +1,7 @@
-import { and, eq, desc } from "drizzle-orm";
+import { and, eq, desc, inArray } from "drizzle-orm";
 import {
   users,
+  dept as deptTable,
   employees,
   attendance as attendanceTable,
   payroll as payrollTable,
@@ -9,8 +10,10 @@ import {
   employeeSalaryHistory,
   type Attendance,
   type Employee,
+  type Dept,
   type Indemnity,
   type InsertAttendance,
+  type InsertDept,
   type InsertEmployee,
   type InsertIndemnity,
   type InsertLeave,
@@ -22,7 +25,7 @@ import {
   type EmployeeSalaryHistory,
   type InsertEmployeeSalaryHistory,
 } from "@shared/schema";
-import type { IStorage } from "./types";
+import type { IStorage, EmployeeWithDeptName } from "./types";
 
 export class DrizzleStorage implements IStorage {
   constructor(private db: any) {}
@@ -42,8 +45,49 @@ export class DrizzleStorage implements IStorage {
     return rows[0];
   }
 
+  // Departments
+  async getDepts(): Promise<Dept[]> {
+    return await this.db.select().from(deptTable).orderBy(deptTable.name);
+  }
+
+  async getDept(id: number): Promise<Dept | undefined> {
+    const rows = await this.db.select().from(deptTable).where(eq(deptTable.id, id)).limit(1);
+    return rows[0];
+  }
+
+  async createDept(data: InsertDept): Promise<Dept> {
+    const rows = await this.db.insert(deptTable).values(data).returning();
+    return rows[0];
+  }
+
+  async updateDept(id: number, data: Partial<InsertDept>): Promise<Dept | undefined> {
+    const rows = await this.db.update(deptTable).set(data).where(eq(deptTable.id, id)).returning();
+    return rows[0];
+  }
+
+  async deleteDept(id: number): Promise<boolean> {
+    const rows = await this.db.delete(deptTable).where(eq(deptTable.id, id)).returning({ id: deptTable.id });
+    return rows.length > 0;
+  }
+
   async getEmployees(): Promise<Employee[]> {
     return await this.db.select().from(employees);
+  }
+
+  async getEmployeesWithDeptName(): Promise<EmployeeWithDeptName[]> {
+    const [empRows, depts] = await Promise.all([
+      this.db.select().from(employees),
+      this.db.select().from(deptTable),
+    ]);
+    const deptMap = new Map(depts.map((d) => [d.id, d.name]));
+    return empRows.map((e) => ({
+      ...e,
+      department_name: deptMap.get(e.dept_id) ?? "",
+    }));
+  }
+
+  async getEmployeesByDept(deptId: number): Promise<Employee[]> {
+    return await this.db.select().from(employees).where(eq(employees.dept_id, deptId));
   }
 
   async getEmployee(empId: string): Promise<Employee | undefined> {
@@ -66,9 +110,25 @@ export class DrizzleStorage implements IStorage {
     return rows.length > 0;
   }
 
-  async getAttendance(month?: string): Promise<Attendance[]> {
+  async getAttendance(month?: string, deptId?: number): Promise<Attendance[]> {
+    if (month && deptId != null) {
+      const empIds = await this.db.select({ emp_id: employees.emp_id }).from(employees).where(eq(employees.dept_id, deptId));
+      const ids = empIds.map((r) => r.emp_id);
+      if (ids.length === 0) return [];
+      return await this.db
+        .select()
+        .from(attendanceTable)
+        .where(and(eq(attendanceTable.month, month), inArray(attendanceTable.emp_id, ids)));
+    }
     if (month) return await this.db.select().from(attendanceTable).where(eq(attendanceTable.month, month));
     return await this.db.select().from(attendanceTable);
+  }
+
+  async deleteAttendanceByMonthAndEmpIds(month: string, empIds: string[]): Promise<void> {
+    if (empIds.length === 0) return;
+    await this.db
+      .delete(attendanceTable)
+      .where(and(eq(attendanceTable.month, month), inArray(attendanceTable.emp_id, empIds)));
   }
 
   async getAttendanceByEmployee(empId: string, month?: string): Promise<Attendance[]> {
@@ -101,7 +161,16 @@ export class DrizzleStorage implements IStorage {
     return rows.length > 0;
   }
 
-  async getPayroll(month?: string): Promise<Payroll[]> {
+  async getPayroll(month?: string, deptId?: number): Promise<Payroll[]> {
+    if (month && deptId != null) {
+      const empIds = await this.db.select({ emp_id: employees.emp_id }).from(employees).where(eq(employees.dept_id, deptId));
+      const ids = empIds.map((r) => r.emp_id);
+      if (ids.length === 0) return [];
+      return await this.db
+        .select()
+        .from(payrollTable)
+        .where(and(eq(payrollTable.month, month), inArray(payrollTable.emp_id, ids)));
+    }
     if (month) return await this.db.select().from(payrollTable).where(eq(payrollTable.month, month));
     return await this.db.select().from(payrollTable);
   }
@@ -137,6 +206,13 @@ export class DrizzleStorage implements IStorage {
 
   async deletePayroll(month: string): Promise<void> {
     await this.db.delete(payrollTable).where(eq(payrollTable.month, month));
+  }
+
+  async deletePayrollForEmployees(month: string, empIds: string[]): Promise<void> {
+    if (empIds.length === 0) return;
+    await this.db
+      .delete(payrollTable)
+      .where(and(eq(payrollTable.month, month), inArray(payrollTable.emp_id, empIds)));
   }
 
   async getLeaves(status?: string): Promise<Leave[]> {

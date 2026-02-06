@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +10,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { deptApi } from "@/api/dept";
+import type { Dept } from "@shared/schema";
 
 interface EmployeeFormData {
   emp_id: string;
@@ -17,7 +19,7 @@ interface EmployeeFormData {
   civil_id: string;
   designation: string;
   category: "Direct" | "Indirect";
-  project: string;
+  dept_id: number;
   basic_salary: string;
   other_allowance: string;
   food_allowance_type: "per_day" | "fixed" | "none";
@@ -38,13 +40,14 @@ interface EmployeeFormProps {
 }
 
 export default function EmployeeForm({ initialData, onSubmit, onCancel }: EmployeeFormProps) {
+  const [depts, setDepts] = useState<Dept[]>([]);
   const [formData, setFormData] = useState<EmployeeFormData>({
     emp_id: initialData?.emp_id || "",
     name: initialData?.name || "",
     civil_id: initialData?.civil_id || "",
     designation: initialData?.designation || "",
     category: initialData?.category || "Direct",
-    project: initialData?.project || "",
+    dept_id: initialData?.dept_id ?? 0,
     basic_salary: initialData?.basic_salary ?? "",
     other_allowance: initialData?.other_allowance ?? "",
     food_allowance_type: initialData?.food_allowance_type || "none",
@@ -58,12 +61,26 @@ export default function EmployeeForm({ initialData, onSubmit, onCancel }: Employ
     bank_ac_no: initialData?.bank_ac_no ?? "",
   });
 
+  useEffect(() => {
+    deptApi.getAll().then((d) => setDepts(d ?? []));
+  }, []);
+
+  useEffect(() => {
+    if (depts.length === 0) return;
+    setFormData((prev) => {
+      const targetDeptId = initialData?.dept_id != null ? initialData.dept_id : depts[0].id;
+      const valid = depts.some((d) => d.id === prev.dept_id);
+      if (prev.dept_id === targetDeptId && valid) return prev;
+      return { ...prev, dept_id: initialData?.dept_id ?? depts[0].id };
+    });
+  }, [depts, initialData?.dept_id]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit?.(formData);
   };
 
-  const updateField = (field: keyof EmployeeFormData, value: string) => {
+  const updateField = (field: keyof EmployeeFormData, value: string | number) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -151,18 +168,24 @@ export default function EmployeeForm({ initialData, onSubmit, onCancel }: Employ
             </Select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="project" className="text-sm font-medium">
+            <Label htmlFor="dept_id" className="text-sm font-medium">
               Department <span className="text-destructive">*</span>
             </Label>
-            <Input
-              id="project"
-              value={formData.project}
-              onChange={(e) => updateField("project", e.target.value)}
-              placeholder="e.g., Engineering"
-              required
-              data-testid="input-project"
-              className="h-10"
-            />
+            <Select
+              value={formData.dept_id ? String(formData.dept_id) : ""}
+              onValueChange={(val) => updateField("dept_id", val ? parseInt(val, 10) : 0)}
+            >
+              <SelectTrigger id="dept_id" className="h-10" data-testid="select-dept">
+                <SelectValue placeholder="Select department" />
+              </SelectTrigger>
+              <SelectContent>
+                {depts.map((d) => (
+                  <SelectItem key={d.id} value={String(d.id)}>
+                    {d.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-2">
             <Label htmlFor="doj" className="text-sm font-medium">
