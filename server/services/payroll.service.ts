@@ -77,18 +77,25 @@ function calculateHourlyBasicSalary(monthlyBasicSalary: number, workingHoursPerD
 }
 
 /**
+ * Cap worked days at 26 (Kuwait standard). Used for proration so we never pay more than full month.
+ */
+function capWorkingDaysAtMax(workedDays: number): number {
+  return Math.min(workedDays, KUWAIT_WORKING_DAYS_PER_MONTH);
+}
+
+/**
  * Calculate prorated salary based on worked days WITH CAPPING
- * - If worked days >= 26: Pay FULL monthly amount (salaried employees)
- * - If worked days < 26: Prorate by worked days (absence penalty)
+ * - Working days are capped at 26 max (salaried employees never get more than full month)
+ * - If worked days >= 26: Pay FULL monthly amount
+ * - If worked days < 26: Prorate by (capped) worked days (absence penalty)
  */
 function calculateProratedAmount(monthlyAmount: number, workedDays: number): number {
   if (monthlyAmount <= 0) return 0;
-  
-  if (workedDays >= KUWAIT_WORKING_DAYS_PER_MONTH) {
+  const capped = capWorkingDaysAtMax(workedDays);
+  if (capped >= KUWAIT_WORKING_DAYS_PER_MONTH) {
     return monthlyAmount; // FULL amount - CAPPED
   }
-  
-  return (monthlyAmount / KUWAIT_WORKING_DAYS_PER_MONTH) * workedDays;
+  return (monthlyAmount / KUWAIT_WORKING_DAYS_PER_MONTH) * capped;
 }
 
 /** Employee with optional department name (from join) */
@@ -126,7 +133,9 @@ function qualifiesForFoodAllowance(employee: Employee): boolean {
 // =============================================================================
 
 /**
- * Aggregate attendance records for a month into a single summary
+ * Aggregate attendance records for a month into a single summary.
+ * Payroll uses actualPresentDays: when attendance has round_off (rounded working days), we use that;
+ * otherwise we use present_days. Working days are later capped at 26 for proration.
  */
 export function aggregateAttendance(attendances: Attendance[]): AggregatedAttendance {
   const workingDays = attendances.reduce((sum, att) => 
@@ -138,7 +147,7 @@ export function aggregateAttendance(attendances: Attendance[]): AggregatedAttend
   const absentDays = attendances.reduce((sum, att) => 
     sum + (parseInt(att.absent_days.toString()) || 0), 0);
   
-  // Use round_off if available
+  // Rounded working days from sheet (round_off); used for salary proration when present
   const roundedOffDays = attendances.reduce((sum, att) => {
     const roundOff = att.round_off ? parseFloat(att.round_off.toString()) : 0;
     return sum + roundOff;
@@ -272,7 +281,9 @@ export function calculateFoodAllowance(employee: Employee, actualPresentDays: nu
 // =============================================================================
 
 /**
- * Calculate payroll for a single employee
+ * Calculate payroll for a single employee.
+ * Uses rounded working days (round_off) when present in attendance; otherwise present_days.
+ * Working days used for proration are capped at 26 max.
  */
 export function calculateEmployeePayroll(
   employee: Employee,
@@ -283,14 +294,17 @@ export function calculateEmployeePayroll(
   const otherAllowance = parseFloat(employee.other_allowance || "0");
   const { actualPresentDays, otHoursNormal, otHoursFriday, otHoursHoliday, duesEarned } = attendance;
   
-  // Calculate prorated salaries
+  // Use rounded working days for proration; cap at 26 max (salary never exceeds full month)
+  const daysForProration = capWorkingDaysAtMax(actualPresentDays);
+  
+  // Calculate prorated salaries (uses rounded days; capped at 26 inside calculateProratedAmount)
   const proratedBasicSalary = calculateProratedAmount(monthlyBasicSalary, actualPresentDays);
   const proratedOtherAllowance = calculateProratedAmount(otherAllowance, actualPresentDays);
   
   // Calculate OT
   const ot = calculateOT(employee, otHoursNormal, otHoursFriday, otHoursHoliday);
   
-  // Calculate food allowance
+  // Calculate food allowance (same rounded/capped days)
   const foodAllowance = calculateFoodAllowance(employee, actualPresentDays);
   
   // Calculate totals
@@ -307,7 +321,7 @@ export function calculateEmployeePayroll(
     basic_salary: proratedBasicSalary.toFixed(2),
     ot_amount: ot.pay.total.toFixed(2),
     food_allowance: foodAllowance.toFixed(2),
-    days_worked: actualPresentDays,
+    days_worked: Math.round(daysForProration),
     gross_salary: grossSalary.toFixed(2),
     deductions: deductions.toFixed(2),
     dues_earned: duesEarned.toFixed(2),

@@ -8,6 +8,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { employeesApi } from "@/api/employees";
 
@@ -96,26 +97,33 @@ export default function Employees() {
   };
 
   const handleSubmit = async (data: any) => {
+    const deptId = Number(data.dept_id);
+    if (!editingEmployee && (!deptId || deptId < 1)) {
+      alert("Please select a department.");
+      return;
+    }
+
     const payload = {
-      emp_id: data.emp_id,
-      name: data.name,
-      designation: data.designation,
-      dept_id: data.dept_id,
+      emp_id: String(data.emp_id).trim(),
+      name: String(data.name).trim(),
+      designation: String(data.designation).trim(),
+      dept_id: deptId,
       category: data.category || "Direct",
       civil_id: data.civil_id?.trim() || null,
       doj: data.doj,
       internal_department_doj: data.internal_department_doj || null,
       five_year_calc_date: data.five_year_calc_date || null,
-      basic_salary: Number(data.basic_salary) || 0,
-      other_allowance: Number(data.other_allowance) || 0,
+      basic_salary: String(Number(data.basic_salary) || 0),
+      other_allowance: String(Number(data.other_allowance) || 0),
       food_allowance_type: data.food_allowance_type || "none",
-      food_allowance_amount: data.food_allowance_type === "none" ? 0 : Number(data.food_allowance_value) || 0,
+      food_allowance_amount: String(data.food_allowance_type === "none" ? 0 : Number(data.food_allowance_value) || 0),
       working_hours: Number(data.working_hours) || 8,
-      indemnity_rate: Number(data.indemnity_rate) || 0,
-      ot_rate_normal: Number(data.ot_rate_normal) || 0,
-      ot_rate_friday: Number(data.ot_rate_friday) || 0,
-      ot_rate_holiday: Number(data.ot_rate_holiday) || 0,
+      indemnity_rate: String(Number(data.indemnity_rate) || 0),
+      ot_rate_normal: String(Number(data.ot_rate_normal) || 0),
+      ot_rate_friday: String(Number(data.ot_rate_friday) || 0),
+      ot_rate_holiday: String(Number(data.ot_rate_holiday) || 0),
       status: data.status || editingEmployee?.status || "active",
+      accommodation: "Own",
     };
 
     try {
@@ -129,8 +137,14 @@ export default function Employees() {
       await loadEmployees();
       setIsDialogOpen(false);
       setEditingEmployee(null);
-    } catch (err) {
-      alert("Save failed");
+    } catch (err: any) {
+      let msg = err?.message ?? "Save failed";
+      if (Array.isArray(err?.details)) {
+        msg = err.details.map((e: any) => e?.message ?? JSON.stringify(e)).join("; ");
+      } else if (Array.isArray(err?.message)) {
+        msg = err.message.map((e: any) => e?.message ?? e).join("; ");
+      }
+      alert(msg);
     }
   };
 
@@ -186,6 +200,9 @@ export default function Employees() {
             <DialogTitle>
               {editingEmployee ? "Edit Employee" : "Add New Employee"}
             </DialogTitle>
+            <DialogDescription id="add-employee-desc">
+              {editingEmployee ? "Update employee details below." : "Fill in the form and select a department. All fields marked with * are required."}
+            </DialogDescription>
           </DialogHeader>
           <EmployeeForm
             initialData={initialData} // ✅ FIXED: Now properly typed as Partial<EmployeeFormData> | undefined

@@ -46,12 +46,21 @@ router.get("/:empId", async (req, res) => {
  */
 router.post("/", async (req, res) => {
   try {
-    const data = insertEmployeeSchema.parse(req.body);
+    const body = req.body;
+    const deptId = body.dept_id != null ? parseInt(String(body.dept_id), 10) : NaN;
+    if (!Number.isInteger(deptId) || deptId < 1) {
+      return res.status(400).json({ error: "Valid department (dept_id) is required", details: [{ path: ["dept_id"], message: "Select a department" }] });
+    }
+    const existingDept = await storage.getDept(deptId);
+    if (!existingDept) {
+      return res.status(400).json({ error: "Invalid department", details: [{ path: ["dept_id"], message: "Department not found" }] });
+    }
+    const data = insertEmployeeSchema.parse(body);
     const employee = await storage.createEmployee(data);
     res.json(employee);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return res.status(400).json({ error: error.errors });
+      return res.status(400).json({ error: "Validation failed", details: error.errors });
     }
     res.status(500).json({ error: "Failed to create employee" });
   }
