@@ -37,6 +37,15 @@ export interface ReportRow {
   total_earnings: number;
   comments: string;
   month: string;
+  // Additional fields for template
+  accommodation: string;
+  category: string;
+  doj: string;
+  visa: string;
+  ot_normal_amount: number;
+  ot_friday_amount: number;
+  ot_holiday_amount: number;
+  salary_earned: number;
 }
 
 // =============================================================================
@@ -184,6 +193,9 @@ export function generateMonthlyReport(
     // Allowances earned (prorated other allowance, food is separate)
     const allowances_earned = prorated_other;
     
+    // Salary earned (prorated basic salary)
+    const salary_earned = prorated_basic;
+    
     const row: ReportRow = {
       emp_id: employee.emp_id,
       name: employee.name,
@@ -203,6 +215,15 @@ export function generateMonthlyReport(
       total_earnings: net_salary,
       comments: attendance?.comments ?? "",
       month,
+      // Additional fields for template
+      accommodation: employee.accommodation ?? "",
+      category: employee.category ?? "",
+      doj: employee.doj ?? "",
+      visa: "", // Placeholder - can be added to schema if needed
+      ot_normal_amount: ot_normal_amount,
+      ot_friday_amount: ot_friday_amount,
+      ot_holiday_amount: ot_holiday_amount,
+      salary_earned: salary_earned,
     };
     
     rows.push(row);

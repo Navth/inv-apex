@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Download, FileSpreadsheet, FileText, RefreshCw } from "lucide-react";
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx-js-style";
 import { reportsApi } from "@/api/reports";
 
 export default function Reports() {
@@ -110,78 +110,296 @@ export default function Reports() {
       return;
     }
 
-    const columnMap: Record<string, string> = {};
-    availableColumns.forEach((col) => {
-      columnMap[col.id] = col.label;
-    });
+    const monthLabel = formatMonthLabel(selectedMonth);
+    
+    // Template column structure (matching the template exactly)
+    const templateColumns = [
+      { key: "emp_id", header: "emp id", width: 12 },
+      { key: "month", header: "Month", width: 15 },
+      { key: "accommodation", header: "Accommodation", width: 15 },
+      { key: "visa", header: "Visa", width: 12 },
+      { key: "project", header: "Project/place of work", width: 20 },
+      { key: "name", header: "Name", width: 25 },
+      { key: "designation", header: "DESIGNATION", width: 18 },
+      { key: "salary", header: "Salary", width: 12, numeric: true },
+      { key: "worked_days", header: "Worked Days", width: 12, numeric: true },
+      { key: "normal_ot", header: "Normal O.T", width: 12, numeric: true },
+      { key: "friday_ot", header: "Friday O.T", width: 12, numeric: true },
+      { key: "holiday_ot", header: "Public holiday O.T", width: 18, numeric: true },
+      { key: "deductions", header: "Deductions", width: 12, numeric: true },
+      { key: "salary_earned", header: "Salary Earned", width: 14, numeric: true },
+      { key: "food_allow", header: "Food allowance earned", width: 20, numeric: true },
+      { key: "allowances_earned", header: "Allowances earned", width: 18, numeric: true },
+      { key: "dues_earned", header: "Dues earned", width: 12, numeric: true },
+      { key: "not_earned", header: "NOT Earned", width: 14, numeric: true },
+      { key: "fot_earned", header: "FOT Earned", width: 12, numeric: true },
+      { key: "hot_earned", header: "HOT Earned", width: 12, numeric: true },
+      { key: "total_earnings", header: "Total Earnings", width: 14, numeric: true },
+      { key: "comments", header: "Comments", width: 25 },
+    ];
 
-    const excelData = rows.map((row) => {
-      const filteredRow: Record<string, any> = {};
-      selectedColumns.forEach((colId) => {
-        const label = columnMap[colId] || colId;
-        let value = row[colId];
+    // Style definitions
+    const headerStyle = {
+      font: { bold: true, color: { rgb: "FFFFFF" } },
+      fill: { fgColor: { rgb: "4472C4" } },
+      alignment: { horizontal: "center", vertical: "center", wrapText: true },
+      border: {
+        top: { style: "thin", color: { rgb: "000000" } },
+        bottom: { style: "thin", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } },
+      },
+    };
 
-        if (
-          typeof value === "number" &&
-          ["salary", "food_allow", "allowances_earned", "dues_earned", "deductions", "gross_salary"].includes(colId)
-        ) {
-          value = parseFloat(value.toString()).toFixed(2);
-        } else if (colId === "total_earnings" && typeof value === "number") {
-          // Net salary is already rounded to integer on backend
-          value = Math.round(value);
+    const titleStyle = {
+      font: { bold: true, sz: 14 },
+      alignment: { horizontal: "left", vertical: "center" },
+    };
+
+    const monthStyle = {
+      font: { bold: true, sz: 12 },
+      alignment: { horizontal: "left", vertical: "center" },
+    };
+
+    const dataStyle = {
+      alignment: { horizontal: "left", vertical: "center" },
+      border: {
+        top: { style: "thin", color: { rgb: "D9D9D9" } },
+        bottom: { style: "thin", color: { rgb: "D9D9D9" } },
+        left: { style: "thin", color: { rgb: "D9D9D9" } },
+        right: { style: "thin", color: { rgb: "D9D9D9" } },
+      },
+    };
+
+    const numericDataStyle = {
+      ...dataStyle,
+      alignment: { horizontal: "right", vertical: "center" },
+      numFmt: "#,##0.00",
+    };
+
+    const totalRowStyle = {
+      font: { bold: true },
+      fill: { fgColor: { rgb: "E2EFDA" } },
+      alignment: { horizontal: "right", vertical: "center" },
+      border: {
+        top: { style: "medium", color: { rgb: "000000" } },
+        bottom: { style: "medium", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } },
+      },
+    };
+
+    // Create worksheet data array
+    const wsData: any[][] = [];
+
+    // Row 1: Title and Month
+    const titleRow = new Array(templateColumns.length).fill("");
+    titleRow[1] = { v: "Gas Emission control- Salary working", s: titleStyle };
+    titleRow[5] = { v: `Month: ${monthLabel}`, s: monthStyle };
+    wsData.push(titleRow);
+
+    // Row 2: Column headers
+    const headerRow = templateColumns.map((col) => ({
+      v: col.header,
+      s: headerStyle,
+    }));
+    wsData.push(headerRow);
+
+    // Data rows (starting at row 3)
+    let salaryTotal = 0;
+    let workedDaysTotal = 0;
+    let normalOtTotal = 0;
+    let fridayOtTotal = 0;
+    let holidayOtTotal = 0;
+    let deductionsTotal = 0;
+    let salaryEarnedTotal = 0;
+    let foodAllowTotal = 0;
+    let allowancesTotal = 0;
+    let duesTotal = 0;
+    let notEarnedTotal = 0;
+    let fotEarnedTotal = 0;
+    let hotEarnedTotal = 0;
+    let totalEarningsTotal = 0;
+
+    rows.forEach((row) => {
+      // Use OT earned amounts from backend
+      const notEarned = Number(row.ot_normal_amount) || 0;
+      const fotEarned = Number(row.ot_friday_amount) || 0;
+      const hotEarned = Number(row.ot_holiday_amount) || 0;
+      
+      // Use salary earned from backend
+      const salaryEarned = Number(row.salary_earned) || 0;
+
+      const dataRow = templateColumns.map((col) => {
+        let value: any = "";
+        const style = col.numeric ? numericDataStyle : dataStyle;
+
+        switch (col.key) {
+          case "emp_id":
+            value = row.emp_id || "";
+            break;
+          case "month":
+            value = monthLabel;
+            break;
+          case "accommodation":
+            value = row.accommodation || "";
+            break;
+          case "visa":
+            value = row.visa || "";
+            break;
+          case "project":
+            value = row.department || "";
+            break;
+          case "name":
+            value = row.name || "";
+            break;
+          case "designation":
+            value = row.designation || "";
+            break;
+          case "salary":
+            value = Number(row.salary) || 0;
+            salaryTotal += value;
+            break;
+          case "worked_days":
+            value = Number(row.worked_days) || 0;
+            workedDaysTotal += value;
+            break;
+          case "normal_ot":
+            value = Number(row.normal_ot) || 0;
+            normalOtTotal += value;
+            break;
+          case "friday_ot":
+            value = Number(row.friday_ot) || 0;
+            fridayOtTotal += value;
+            break;
+          case "holiday_ot":
+            value = Number(row.holiday_ot) || 0;
+            holidayOtTotal += value;
+            break;
+          case "deductions":
+            value = Number(row.deductions) || 0;
+            deductionsTotal += value;
+            break;
+          case "salary_earned":
+            value = Number(salaryEarned) || 0;
+            salaryEarnedTotal += value;
+            break;
+          case "food_allow":
+            value = Number(row.food_allow) || 0;
+            foodAllowTotal += value;
+            break;
+          case "allowances_earned":
+            value = Number(row.allowances_earned) || 0;
+            allowancesTotal += value;
+            break;
+          case "dues_earned":
+            value = Number(row.dues_earned) || 0;
+            duesTotal += value;
+            break;
+          case "not_earned":
+            value = Number(notEarned) || 0;
+            notEarnedTotal += value;
+            break;
+          case "fot_earned":
+            value = Number(fotEarned) || 0;
+            fotEarnedTotal += value;
+            break;
+          case "hot_earned":
+            value = Number(hotEarned) || 0;
+            hotEarnedTotal += value;
+            break;
+          case "total_earnings":
+            value = Number(row.total_earnings) || 0;
+            totalEarningsTotal += value;
+            break;
+          case "comments":
+            value = row.comments || "";
+            break;
+          default:
+            value = "";
         }
 
-        filteredRow[label] = value ?? "";
+        return { v: value, s: style, t: col.numeric ? "n" : "s" };
       });
-      return filteredRow;
+
+      wsData.push(dataRow);
     });
 
-const totalRow: Record<string, any> = {};
-const firstSelectedLabel = columnMap[selectedColumns[0]] || selectedColumns[0];
-totalRow[firstSelectedLabel] = "TOTAL";
+    // Total row
+    const totalRow = templateColumns.map((col, idx) => {
+      let value: any = "";
+      
+      if (idx === 0) {
+        return { v: "TOTAL", s: { ...totalRowStyle, font: { bold: true }, alignment: { horizontal: "left" } } };
+      }
+      
+      switch (col.key) {
+        case "salary":
+          value = salaryTotal;
+          break;
+        case "worked_days":
+          value = workedDaysTotal;
+          break;
+        case "normal_ot":
+          value = normalOtTotal;
+          break;
+        case "friday_ot":
+          value = fridayOtTotal;
+          break;
+        case "holiday_ot":
+          value = holidayOtTotal;
+          break;
+        case "deductions":
+          value = deductionsTotal;
+          break;
+        case "salary_earned":
+          value = salaryEarnedTotal;
+          break;
+        case "food_allow":
+          value = foodAllowTotal;
+          break;
+        case "allowances_earned":
+          value = allowancesTotal;
+          break;
+        case "dues_earned":
+          value = duesTotal;
+          break;
+        case "not_earned":
+          value = notEarnedTotal;
+          break;
+        case "fot_earned":
+          value = fotEarnedTotal;
+          break;
+        case "hot_earned":
+          value = hotEarnedTotal;
+          break;
+        case "total_earnings":
+          value = totalEarningsTotal;
+          break;
+        default:
+          return { v: "", s: totalRowStyle };
+      }
 
-const numericCols = [
-  "salary",
-  "worked_days",
-  "working_days",
-  "normal_ot",
-  "friday_ot",
-  "holiday_ot",
-  "food_allow",
-  "allowances_earned",
-  "dues_earned",
-  "deductions",
-  "gross_salary",
-  "total_earnings",
-];
+      return { v: Math.round(value), s: totalRowStyle, t: "n" };
+    });
 
-selectedColumns.forEach((colId) => {
-  const label = columnMap[colId] || colId;
-  if (numericCols.includes(colId)) {
-    const total = rows.reduce(
-      (sum, row) => sum + (Number(row[colId]) || 0),
-      0
-    );
-    totalRow[label] = Math.round(total);
-  } else if (label !== firstSelectedLabel) {
-    totalRow[label] = "";
-  }
-});
+    wsData.push(totalRow);
 
-excelData.push(totalRow);
+    // Create worksheet from array of arrays
+    const worksheet = XLSX.utils.aoa_to_sheet(wsData);
 
+    // Set column widths
+    worksheet["!cols"] = templateColumns.map((col) => ({ wch: col.width }));
 
+    // Set row heights
+    worksheet["!rows"] = [
+      { hpt: 25 }, // Title row
+      { hpt: 30 }, // Header row
+    ];
 
-    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    // Create workbook
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Report");
-
-    const maxWidths: number[] = [];
-    selectedColumns.forEach((colId, idx) => {
-      const label = columnMap[colId] || colId;
-      maxWidths[idx] = Math.max(label.length, 15);
-    });
-    worksheet["!cols"] = maxWidths.map((w) => ({ wch: w }));
+    XLSX.utils.book_append_sheet(workbook, worksheet, `${monthLabel} - Salary working`);
 
     const filename = `Salary_Report_${selectedMonth}.xlsx`;
     XLSX.writeFile(workbook, filename);
