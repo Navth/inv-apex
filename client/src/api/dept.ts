@@ -13,8 +13,11 @@ export async function createDept(name: string): Promise<Dept> {
   return api.post<Dept>('/api/dept', { name });
 }
 
-export async function updateDept(id: number, name: string): Promise<Dept> {
-  return api.patch<Dept>(`/api/dept/${id}`, { name });
+export async function updateDept(
+  id: number,
+  updates: { name?: string; completed?: boolean }
+): Promise<Dept> {
+  return api.patch<Dept>(`/api/dept/${id}`, updates);
 }
 
 export async function deleteDept(id: number): Promise<{ success: boolean }> {

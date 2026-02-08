@@ -72,7 +72,7 @@ const menuItems = [
     icon: FileText,
   },
   {
-    title: "Departments",
+    title: "Department / Projects",
     url: "/departments",
     icon: Building2,
   },

@@ -17,10 +17,11 @@ export const insertUserSchema = createInsertSchema(users).pick({
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
-// Departments - referenced by employees
+// Departments / Projects - referenced by employees
 export const dept = pgTable("dept", {
   id: serial("id").primaryKey(),
   name: text("name").notNull().unique(),
+  completed: boolean("completed").notNull().default(false),
 });
 
 export const insertDeptSchema = createInsertSchema(dept).omit({ id: true });
