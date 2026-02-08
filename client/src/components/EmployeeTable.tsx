@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Pencil, Trash2, Search } from "lucide-react";
+import { Pencil, Trash2, Search, TrendingUp } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -32,15 +32,21 @@ interface EmployeeRow {
   other_allowance: number;
   working_hours: number;
   indemnity_rate: number;
+  status?: string;
+  ot_rate_normal?: number;
+  ot_rate_friday?: number;
+  ot_rate_holiday?: number;
+  accommodation?: string;
 }
 
 interface EmployeeTableProps {
   employees: EmployeeRow[];
   onEdit?: (employee: EmployeeRow) => void;
   onDelete?: (empId: string) => void;
+  onIncrement?: (employee: EmployeeRow) => void;
 }
 
-export default function EmployeeTable({ employees, onEdit, onDelete }: EmployeeTableProps) {
+export default function EmployeeTable({ employees, onEdit, onDelete, onIncrement }: EmployeeTableProps) {
   const [searchTerm, setSearchTerm] = useState("");
 
   const normalizedQuery = searchTerm.toLowerCase();
@@ -128,6 +134,17 @@ export default function EmployeeTable({ employees, onEdit, onDelete }: EmployeeT
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
+                    {onIncrement && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => onIncrement(employee)}
+                        data-testid={`button-increment-${employee.emp_id}`}
+                        title="Record salary increment"
+                      >
+                        <TrendingUp className="h-4 w-4" />
+                      </Button>
+                    )}
                     <Button
                       size="icon"
                       variant="ghost"

@@ -2,15 +2,24 @@ import { useState, useEffect } from "react";
 import EmployeeTable from "@/components/EmployeeTable";
 import EmployeeForm from "@/components/EmployeeForm";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Plus, TrendingUp, CalendarIcon } from "lucide-react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as DayPickerCalendar } from "@/components/ui/calendar";
 import { employeesApi } from "@/api/employees";
+import { salaryHistoryApi } from "@/api/salaryHistory";
+import { cn } from "@/lib/utils";
+import { format } from "date-fns";
 
 type AllowanceType = "per_day" | "fixed" | "none";
 
@@ -35,12 +44,27 @@ interface EmployeeRow {
   ot_rate_normal?: number;
   ot_rate_friday?: number;
   ot_rate_holiday?: number;
+  accommodation?: string;
 }
 
 export default function Employees() {
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<EmployeeRow | null>(null);
+  const [incrementEmployee, setIncrementEmployee] = useState<EmployeeRow | null>(null);
+  const [incrementDate, setIncrementDate] = useState<Date | undefined>(undefined);
+  const [incrementForm, setIncrementForm] = useState({
+    basic_salary: "",
+    other_allowance: "",
+    food_allowance_amount: "",
+    food_allowance_type: "none" as "none" | "daily" | "monthly",
+    working_hours: 8,
+    ot_rate_normal: "",
+    ot_rate_friday: "",
+    ot_rate_holiday: "",
+    notes: "",
+  });
+  const [incrementSubmitting, setIncrementSubmitting] = useState(false);
 
   async function loadEmployees() {
     try {
@@ -67,6 +91,7 @@ export default function Employees() {
         ot_rate_normal: Number(e.ot_rate_normal) || 0,
         ot_rate_friday: Number(e.ot_rate_friday) || 0,
         ot_rate_holiday: Number(e.ot_rate_holiday) || 0,
+        accommodation: e.accommodation ?? "Own",
       }));
       setEmployees(mapped);
     } catch (err) {
@@ -81,6 +106,72 @@ export default function Employees() {
   const handleEdit = (employee: EmployeeRow) => {
     setEditingEmployee(employee);
     setIsDialogOpen(true);
+  };
+
+  const handleIncrementClick = (employee: EmployeeRow) => {
+    setIncrementEmployee(employee);
+    setIncrementDate(undefined);
+    setIncrementForm({
+      basic_salary: String(employee.basic_salary),
+      other_allowance: String(employee.other_allowance),
+      food_allowance_amount: String(employee.food_allowance_amount ?? 0),
+      food_allowance_type: employee.food_allowance_type || "none",
+      working_hours: employee.working_hours ?? 8,
+      ot_rate_normal: String(employee.ot_rate_normal ?? 0),
+      ot_rate_friday: String(employee.ot_rate_friday ?? 0),
+      ot_rate_holiday: String(employee.ot_rate_holiday ?? 0),
+      notes: "",
+    });
+  };
+
+  const handleIncrementSubmit = async () => {
+    if (!incrementEmployee || !incrementDate) {
+      alert("Please pick the date from when the new salary applies.");
+      return;
+    }
+    const mm = String(incrementDate.getMonth() + 1).padStart(2, "0");
+    const yyyy = incrementDate.getFullYear();
+    const effective_month = `${mm}-${yyyy}`;
+    const effective_from_day = incrementDate.getDate();
+
+    setIncrementSubmitting(true);
+    try {
+      await employeesApi.update(incrementEmployee.emp_id, {
+        basic_salary: incrementForm.basic_salary,
+        other_allowance: incrementForm.other_allowance,
+        food_allowance_amount: incrementForm.food_allowance_amount,
+        food_allowance_type: incrementForm.food_allowance_type,
+        working_hours: incrementForm.working_hours,
+        ot_rate_normal: incrementForm.ot_rate_normal,
+        ot_rate_friday: incrementForm.ot_rate_friday,
+        ot_rate_holiday: incrementForm.ot_rate_holiday,
+      });
+      await salaryHistoryApi.create({
+        emp_id: incrementEmployee.emp_id,
+        effective_month,
+        effective_from_day,
+        basic_salary: incrementForm.basic_salary,
+        other_allowance: incrementForm.other_allowance,
+        food_allowance_amount: incrementForm.food_allowance_amount,
+        food_allowance_type: incrementForm.food_allowance_type,
+        working_hours: incrementForm.working_hours,
+        ot_rate_normal: incrementForm.ot_rate_normal,
+        ot_rate_friday: incrementForm.ot_rate_friday,
+        ot_rate_holiday: incrementForm.ot_rate_holiday,
+        category: incrementEmployee.category || "Direct",
+        accommodation: incrementEmployee.accommodation || "Own",
+        source: "system",
+        notes: incrementForm.notes ? `Increment: ${incrementForm.notes}` : "Recorded from Employee page",
+      });
+      alert("Increment recorded. Employee salary updated and salary history saved.");
+      setIncrementEmployee(null);
+      await loadEmployees();
+    } catch (err: any) {
+      const msg = err?.response?.data?.error ?? err?.message ?? "Failed to record increment";
+      alert(msg);
+    } finally {
+      setIncrementSubmitting(false);
+    }
   };
 
   const handleDelete = async (empId: string) => {
@@ -192,7 +283,12 @@ export default function Employees() {
         </Button>
       </div>
 
-      <EmployeeTable employees={employees} onEdit={handleEdit} onDelete={handleDelete} />
+      <EmployeeTable
+        employees={employees}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+        onIncrement={handleIncrementClick}
+      />
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -205,13 +301,130 @@ export default function Employees() {
             </DialogDescription>
           </DialogHeader>
           <EmployeeForm
-            initialData={initialData} // ✅ FIXED: Now properly typed as Partial<EmployeeFormData> | undefined
+            initialData={initialData}
             onSubmit={handleSubmit}
             onCancel={() => {
               setIsDialogOpen(false);
               setEditingEmployee(null);
             }}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Record salary increment dialog */}
+      <Dialog open={!!incrementEmployee} onOpenChange={(open) => !open && setIncrementEmployee(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              Record salary increment
+            </DialogTitle>
+            <DialogDescription>
+              {incrementEmployee && (
+                <>Update salary for <strong>{incrementEmployee.name}</strong> and save it in history from the date you choose.</>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          {incrementEmployee && (
+            <div className="space-y-4 py-2">
+              <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                <p className="font-medium text-sm">From which date does the new salary apply?</p>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !incrementDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {incrementDate ? format(incrementDate, "EEEE, d MMMM yyyy") : "Pick a date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <DayPickerCalendar
+                      mode="single"
+                      selected={incrementDate}
+                      onSelect={setIncrementDate}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Basic salary (KWD) *</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={incrementForm.basic_salary}
+                    onChange={(e) =>
+                      setIncrementForm((f) => ({ ...f, basic_salary: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Other allowance (KWD)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={incrementForm.other_allowance}
+                    onChange={(e) =>
+                      setIncrementForm((f) => ({ ...f, other_allowance: e.target.value }))
+                    }
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Food allowance (KWD)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={incrementForm.food_allowance_amount}
+                    onChange={(e) =>
+                      setIncrementForm((f) => ({ ...f, food_allowance_amount: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Working hours / day</Label>
+                  <Input
+                    type="number"
+                    value={incrementForm.working_hours}
+                    onChange={(e) =>
+                      setIncrementForm((f) => ({
+                        ...f,
+                        working_hours: parseInt(e.target.value, 10) || 8,
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Notes (optional)</Label>
+                <Textarea
+                  placeholder="e.g. Annual increment, promotion..."
+                  value={incrementForm.notes}
+                  onChange={(e) =>
+                    setIncrementForm((f) => ({ ...f, notes: e.target.value }))
+                  }
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIncrementEmployee(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleIncrementSubmit}
+              disabled={incrementSubmitting || !incrementDate}
+            >
+              {incrementSubmitting ? "Saving..." : "Record increment"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
