@@ -34,7 +34,12 @@ app.use((req, res, next) => {
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+        const bodyStr = JSON.stringify(capturedJsonResponse);
+        logLine += ` :: ${bodyStr}`;
+        // For 4xx with validation details, log full details so they appear in production logs
+        if (res.statusCode >= 400 && res.statusCode < 500 && capturedJsonResponse.details) {
+          log(`[${req.method} ${path}] validation details: ${JSON.stringify(capturedJsonResponse.details)}`);
+        }
       }
 
       if (logLine.length > 80) {

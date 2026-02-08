@@ -134,25 +134,29 @@ function qualifiesForFoodAllowance(employee: Employee): boolean {
 
 /**
  * Aggregate attendance records for a month into a single summary.
- * Payroll uses actualPresentDays: when attendance has round_off (rounded working days), we use that;
- * otherwise we use present_days. Working days are later capped at 26 for proration.
+ *
+ * SALARY CALCULATION USES ROUNDED DAYS:
+ * - actualPresentDays is what drives all proration (basic salary, other allowance, food allowance).
+ * - When round_off is present in attendance, we use roundedOffDays (sum of round_off).
+ * - When round_off is null/zero, we fall back to present_days.
+ * - Working days are capped at 26 (KUWAIT_WORKING_DAYS_PER_MONTH) for proration.
  */
 export function aggregateAttendance(attendances: Attendance[]): AggregatedAttendance {
-  const workingDays = attendances.reduce((sum, att) => 
+  const workingDays = attendances.reduce((sum, att) =>
     sum + (parseInt(att.working_days.toString()) || 0), 0);
-  
-  const presentDays = attendances.reduce((sum, att) => 
+
+  const presentDays = attendances.reduce((sum, att) =>
     sum + (parseInt(att.present_days.toString()) || 0), 0);
-  
-  const absentDays = attendances.reduce((sum, att) => 
+
+  const absentDays = attendances.reduce((sum, att) =>
     sum + (parseInt(att.absent_days.toString()) || 0), 0);
-  
-  // Rounded working days from sheet (round_off); used for salary proration when present
+
+  // round_off from sheet = rounded working days; used for salary proration
   const roundedOffDays = attendances.reduce((sum, att) => {
     const roundOff = att.round_off ? parseFloat(att.round_off.toString()) : 0;
     return sum + roundOff;
   }, 0);
-  
+
   const actualPresentDays = roundedOffDays > 0 ? roundedOffDays : presentDays;
   
   const otHoursNormal = attendances.reduce((sum, att) => 
@@ -282,8 +286,10 @@ export function calculateFoodAllowance(employee: Employee, actualPresentDays: nu
 
 /**
  * Calculate payroll for a single employee.
- * Uses rounded working days (round_off) when present in attendance; otherwise present_days.
- * Working days used for proration are capped at 26 max.
+ *
+ * Uses actualPresentDays (round_off when present, else present_days) for all proration.
+ * Basic salary, other allowance, food allowance all use this value.
+ * Capped at 26 max days (Kuwait standard).
  */
 export function calculateEmployeePayroll(
   employee: Employee,
@@ -293,11 +299,10 @@ export function calculateEmployeePayroll(
   const monthlyBasicSalary = parseFloat(employee.basic_salary);
   const otherAllowance = parseFloat(employee.other_allowance || "0");
   const { actualPresentDays, otHoursNormal, otHoursFriday, otHoursHoliday, duesEarned } = attendance;
-  
-  // Use rounded working days for proration; cap at 26 max (salary never exceeds full month)
+
+  // actualPresentDays = roundedOffDays when round_off exists, else present_days
   const daysForProration = capWorkingDaysAtMax(actualPresentDays);
-  
-  // Calculate prorated salaries (uses rounded days; capped at 26 inside calculateProratedAmount)
+
   const proratedBasicSalary = calculateProratedAmount(monthlyBasicSalary, actualPresentDays);
   const proratedOtherAllowance = calculateProratedAmount(otherAllowance, actualPresentDays);
   

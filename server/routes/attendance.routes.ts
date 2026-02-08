@@ -61,11 +61,13 @@ router.post("/", async (req, res) => {
  * Bulk create attendance records.
  * Body: array of attendance records, OR { dept_id, month, attendances } to upload by department.
  * When dept_id is provided: only employees in that dept are allowed; existing attendance for that month for those employees is replaced.
+ * When additive is true: only add records for (emp_id, month) that don't already exist; skip duplicates.
  */
 router.post("/bulk", async (req, res) => {
   try {
     let attendances: z.infer<typeof insertAttendanceSchema>[];
     const body = req.body;
+    const additive = Boolean(body?.additive);
 
     if (Array.isArray(body)) {
       attendances = z.array(insertAttendanceSchema).parse(body);
@@ -90,10 +92,37 @@ router.post("/bulk", async (req, res) => {
           invalidIds: invalid.map((r) => r.emp_id),
         });
       }
-      const empIds = [...new Set(attendances.map((a) => a.emp_id))];
-      await storage.deleteAttendanceByMonthAndEmpIds(month, empIds);
+      if (!additive) {
+        const empIds = [...new Set(attendances.map((a) => a.emp_id))];
+        await storage.deleteAttendanceByMonthAndEmpIds(month, empIds);
+      }
+    } else if (body && typeof body === "object" && body.attendances && body.month) {
+      // Object format without dept: { attendances, month } or { attendances, month, additive: true }
+      attendances = z.array(insertAttendanceSchema).parse(body.attendances);
+      const month = String(body.month);
+      const badMonth = attendances.find((a) => a.month !== month);
+      if (badMonth) {
+        return res.status(400).json({ error: "All attendance records must have month equal to " + month });
+      }
     } else {
-      return res.status(400).json({ error: "Body must be an array of attendance records or { dept_id, month, attendances }" });
+      return res.status(400).json({ error: "Body must be an array of attendance records or { dept_id?, month, attendances, additive? }" });
+    }
+
+    // When additive: filter out records for (emp_id, month) that already exist
+    if (additive && attendances.length > 0) {
+      const monthsInPayload = [...new Set(attendances.map((a) => a.month))];
+      const existing = await Promise.all(monthsInPayload.map((m) => storage.getAttendance(m)));
+      const existingKeySet = new Set<string>();
+      for (const list of existing) {
+        for (const att of list) {
+          existingKeySet.add(`${att.emp_id}:${att.month}`);
+        }
+      }
+      const beforeCount = attendances.length;
+      attendances = attendances.filter((a) => !existingKeySet.has(`${a.emp_id}:${a.month}`));
+      if (attendances.length < beforeCount && process.env.NODE_ENV !== "test") {
+        console.log(`Additive upload: skipped ${beforeCount - attendances.length} existing (emp_id, month), inserting ${attendances.length}`);
+      }
     }
 
     // Validate employee IDs exist

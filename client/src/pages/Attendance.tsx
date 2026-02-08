@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import AttendanceUpload from "@/components/AttendanceUpload";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -28,6 +29,7 @@ export default function Attendance() {
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [selectedMonthNum, setSelectedMonthNum] = useState<number>(currentMonth);
   const [selectedDeptId, setSelectedDeptId] = useState<number | null>(null);
+  const [additiveMode, setAdditiveMode] = useState(false);
   const [depts, setDepts] = useState<Dept[]>([]);
   const [uploaderKey, setUploaderKey] = useState(0);
 
@@ -61,7 +63,11 @@ export default function Attendance() {
         };
       });
 
-      const options = selectedDeptId != null ? { dept_id: selectedDeptId, month: selectedMonth } : undefined;
+      const options = {
+        month: selectedMonth,
+        ...(selectedDeptId != null && { dept_id: selectedDeptId }),
+        ...(additiveMode && { additive: true }),
+      };
       await attendanceApi.bulkCreate(payload as any, options);
       alert("Attendance records saved successfully.");
       setUploaderKey((k) => k + 1);
@@ -145,6 +151,17 @@ export default function Attendance() {
           <p className="text-xs text-muted-foreground mt-1">
             Select a department to upload only that dept’s attendance for this month; existing records for that dept will be replaced.
           </p>
+        </div>
+
+        <div className="flex items-center gap-2 pt-6">
+          <Checkbox
+            id="additive"
+            checked={additiveMode}
+            onCheckedChange={(c) => setAdditiveMode(Boolean(c))}
+          />
+          <Label htmlFor="additive" className="text-sm font-normal cursor-pointer">
+            Only add if missing (skip employees who already have attendance for this month)
+          </Label>
         </div>
       </div>
 

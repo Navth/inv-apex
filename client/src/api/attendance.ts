@@ -34,17 +34,20 @@ export async function createAttendance(attendance: InsertAttendance): Promise<At
 
 /**
  * Bulk create attendance records.
- * Optionally pass deptId and month to upload by department (replaces existing attendance for that month for those employees).
+ * Options:
+ * - dept_id + month: upload by department (replaces existing for that month)
+ * - additive: when true, only add records for (emp_id, month) that don't already exist
  */
 export async function bulkCreateAttendance(
   attendances: InsertAttendance[],
-  options?: { dept_id: number; month: string }
+  options?: { dept_id?: number; month: string; additive?: boolean }
 ): Promise<Attendance[]> {
-  if (options?.dept_id != null && options?.month) {
+  if (options?.month) {
     return api.post<Attendance[]>('/api/attendance/bulk', {
-      dept_id: options.dept_id,
       month: options.month,
       attendances,
+      ...(options.dept_id != null && { dept_id: options.dept_id }),
+      ...(options.additive && { additive: true }),
     });
   }
   return api.post<Attendance[]>('/api/attendance/bulk', attendances);
