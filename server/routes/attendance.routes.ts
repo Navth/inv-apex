@@ -83,15 +83,8 @@ router.post("/bulk", async (req, res) => {
       if (badMonth) {
         return res.status(400).json({ error: "All attendance records must have month equal to " + month });
       }
-      const employeesInDept = await storage.getEmployeesByDept(deptId);
-      const allowedEmpIds = new Set(employeesInDept.map((e) => e.emp_id));
-      const invalid = attendances.filter((a) => !allowedEmpIds.has(a.emp_id));
-      if (invalid.length > 0) {
-        return res.status(400).json({
-          error: "Some employee IDs are not in the selected department",
-          invalidIds: invalid.map((r) => r.emp_id),
-        });
-      }
+      // Do not restrict to "employees currently in this dept" — mid-month transfers mean someone may have
+      // worked in this dept that month but since moved; we only require valid emp_ids (checked below).
       // Replace only this department's slice for this month (keeps other depts' rows for mid-month transfers)
       if (!additive) {
         await storage.deleteAttendanceByMonthAndDept(month, deptId);
