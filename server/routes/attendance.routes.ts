@@ -83,14 +83,28 @@ router.post("/bulk", async (req, res) => {
       if (badMonth) {
         return res.status(400).json({ error: "All attendance records must have month equal to " + month });
       }
-      // Do not restrict to "employees currently in this dept" — mid-month transfers mean someone may have
-      // worked in this dept that month but since moved; we only require valid emp_ids (checked below).
-      // Replace only this department's slice for this month (keeps other depts' rows for mid-month transfers)
-      if (!additive) {
-        await storage.deleteAttendanceByMonthAndDept(month, deptId);
+      // Replace only this department's slice (requires attendance.dept_id column). If DB has no dept_id column yet, fall back to replace-by-emp-ids.
+      const useDeptSlice = await (async (): Promise<boolean> => {
+        if (additive) return false;
+        try {
+          await storage.deleteAttendanceByMonthAndDept(month, deptId);
+          return true;
+        } catch (e: unknown) {
+          const msg = e && typeof e === "object" && "code" in e ? String((e as { code?: string }).code) : "";
+          const hasMsg = e && typeof e === "object" && "message" in e ? String((e as { message?: string }).message) : "";
+          if (msg === "42703" || /dept_id|does not exist/.test(hasMsg)) {
+            const empIds = [...new Set(attendances.map((a) => a.emp_id))];
+            await storage.deleteAttendanceByMonthAndEmpIds(month, empIds);
+            return false;
+          }
+          throw e;
+        }
+      })();
+      if (useDeptSlice) {
+        attendances = attendances.map((a) => ({ ...a, dept_id: deptId }));
+      } else {
+        attendances = attendances.map(({ dept_id: _d, ...rest }) => rest as z.infer<typeof insertAttendanceSchema>);
       }
-      // Tag each record with dept_id so we can replace by dept on future uploads
-      attendances = attendances.map((a) => ({ ...a, dept_id: deptId }));
     } else if (body && typeof body === "object" && body.attendances && body.month) {
       // Object format without dept: { attendances, month } or { attendances, month, additive: true }
       attendances = z.array(insertAttendanceSchema).parse(body.attendances);
@@ -120,19 +134,22 @@ router.post("/bulk", async (req, res) => {
       }
     }
 
-    // Validate employee IDs exist
+    // Skip rows with unknown employee IDs (allow upload to succeed for valid rows)
     const employees = await storage.getEmployees();
     const validEmpIds = new Set(employees.map((e) => e.emp_id));
-    const invalidEmpIds = attendances.filter((a) => !validEmpIds.has(a.emp_id));
-    if (invalidEmpIds.length > 0) {
-      return res.status(400).json({
-        error: "Invalid employee IDs in attendance upload",
-        invalidIds: invalidEmpIds.map((r) => r.emp_id).join(", "),
-      });
-    }
+    const skippedIds = [...new Set(attendances.filter((a) => !validEmpIds.has(a.emp_id)).map((r) => r.emp_id))];
+    attendances = attendances.filter((a) => validEmpIds.has(a.emp_id));
 
-    const created = await storage.bulkCreateAttendance(attendances);
-    res.json(created);
+    const created = attendances.length > 0 ? await storage.bulkCreateAttendance(attendances) : [];
+    if (skippedIds.length > 0) {
+      res.json({
+        created,
+        skippedUnknownEmpIds: skippedIds,
+        message: `Uploaded ${created.length} record(s). Skipped ${skippedIds.length} row(s) with unknown employee ID: ${skippedIds.join(", ")}`,
+      });
+    } else {
+      res.json(created);
+    }
   } catch (error) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: error.errors });

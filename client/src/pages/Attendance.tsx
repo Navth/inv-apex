@@ -68,8 +68,13 @@ export default function Attendance() {
         ...(selectedDeptId != null && { dept_id: selectedDeptId }),
         ...(additiveMode && { additive: true }),
       };
-      await attendanceApi.bulkCreate(payload as any, options);
-      alert("Attendance records saved successfully.");
+      const result = await attendanceApi.bulkCreate(payload as any, options);
+      const created = Array.isArray(result) ? result : result.created;
+      const message =
+        typeof result === "object" && !Array.isArray(result) && result.message
+          ? result.message
+          : `Attendance records saved successfully.${created.length > 0 ? ` ${created.length} record(s) uploaded.` : ""}`;
+      alert(message);
       setUploaderKey((k) => k + 1);
     } catch (err) {
       alert((err as Error).message || "Failed to save attendance records.");

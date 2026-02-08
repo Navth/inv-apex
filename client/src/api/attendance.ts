@@ -32,8 +32,14 @@ export async function createAttendance(attendance: InsertAttendance): Promise<At
   return api.post<Attendance>('/api/attendance', attendance);
 }
 
+/** Response when some rows were skipped (unknown emp_id). Otherwise returns Attendance[] directly. */
+export type BulkAttendanceResponse =
+  | Attendance[]
+  | { created: Attendance[]; skippedUnknownEmpIds: string[]; message: string };
+
 /**
  * Bulk create attendance records.
+ * Rows with unknown employee IDs are skipped; valid rows are uploaded.
  * Options:
  * - dept_id + month: upload by department (replaces existing for that month)
  * - additive: when true, only add records for (emp_id, month) that don't already exist
@@ -41,16 +47,16 @@ export async function createAttendance(attendance: InsertAttendance): Promise<At
 export async function bulkCreateAttendance(
   attendances: InsertAttendance[],
   options?: { dept_id?: number; month: string; additive?: boolean }
-): Promise<Attendance[]> {
+): Promise<BulkAttendanceResponse> {
   if (options?.month) {
-    return api.post<Attendance[]>('/api/attendance/bulk', {
+    return api.post<BulkAttendanceResponse>('/api/attendance/bulk', {
       month: options.month,
       attendances,
       ...(options.dept_id != null && { dept_id: options.dept_id }),
       ...(options.additive && { additive: true }),
     });
   }
-  return api.post<Attendance[]>('/api/attendance/bulk', attendances);
+  return api.post<BulkAttendanceResponse>('/api/attendance/bulk', attendances);
 }
 
 /**
