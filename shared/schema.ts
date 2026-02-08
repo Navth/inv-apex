@@ -58,6 +58,8 @@ export const attendance = pgTable("attendance", {
   id: serial("id").primaryKey(),
   emp_id: varchar("emp_id", { length: 50 }).notNull(),
   month: varchar("month", { length: 7 }).notNull(),
+  /** When set: this record is the attendance slice for this department (e.g. from a dept-specific sheet). Enables multiple rows per emp per month for mid-month transfers. */
+  dept_id: integer("dept_id").references(() => dept.id),
   working_days: integer("working_days").notNull(),
   present_days: integer("present_days").notNull(),
   absent_days: integer("absent_days").notNull(),

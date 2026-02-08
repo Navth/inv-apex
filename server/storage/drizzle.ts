@@ -131,6 +131,12 @@ export class DrizzleStorage implements IStorage {
       .where(and(eq(attendanceTable.month, month), inArray(attendanceTable.emp_id, empIds)));
   }
 
+  async deleteAttendanceByMonthAndDept(month: string, deptId: number): Promise<void> {
+    await this.db
+      .delete(attendanceTable)
+      .where(and(eq(attendanceTable.month, month), eq(attendanceTable.dept_id, deptId)));
+  }
+
   async getAttendanceByEmployee(empId: string, month?: string): Promise<Attendance[]> {
     if (month)
       return await this.db

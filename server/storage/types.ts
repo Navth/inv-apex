@@ -48,6 +48,8 @@ export interface IStorage {
   createAttendance(attendance: InsertAttendance): Promise<Attendance>;
   bulkCreateAttendance(attendances: InsertAttendance[]): Promise<Attendance[]>;
   deleteAttendanceByMonthAndEmpIds(month: string, empIds: string[]): Promise<void>;
+  /** Delete attendance for a month that is tagged with this dept (for replace-by-dept uploads; keeps other depts' rows). */
+  deleteAttendanceByMonthAndDept(month: string, deptId: number): Promise<void>;
   updateAttendance(id: number, attendance: Partial<InsertAttendance>): Promise<Attendance | undefined>;
   deleteAttendance(id: number): Promise<boolean>;
 

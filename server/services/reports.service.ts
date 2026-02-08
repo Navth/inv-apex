@@ -88,8 +88,30 @@ function qualifiesForFoodAllowance(employee: Employee): boolean {
 // REPORT GENERATION
 // =============================================================================
 
+/** Aggregate multiple attendance rows (e.g. from different depts) into one set of totals */
+function aggregateAttendanceForReport(records: Attendance[]): {
+  working_days: number;
+  present_days: number;
+  ot_hours_normal: number;
+  ot_hours_friday: number;
+  ot_hours_holiday: number;
+  dues_earned: number;
+  comments: string;
+} {
+  return {
+    working_days: records.reduce((s, a) => s + (Number(a.working_days) || 0), 0),
+    present_days: records.reduce((s, a) => s + (Number(a.present_days) || 0), 0),
+    ot_hours_normal: records.reduce((s, a) => s + parseFloat(String(a.ot_hours_normal || "0")), 0),
+    ot_hours_friday: records.reduce((s, a) => s + parseFloat(String(a.ot_hours_friday || "0")), 0),
+    ot_hours_holiday: records.reduce((s, a) => s + parseFloat(String(a.ot_hours_holiday || "0")), 0),
+    dues_earned: records.reduce((s, a) => s + parseFloat(String(a.dues_earned || "0")), 0),
+    comments: records.map((a) => a.comments).filter(Boolean).join("; "),
+  };
+}
+
 /**
- * Generate monthly report combining employee, attendance, and payroll data
+ * Generate monthly report combining employee, attendance, and payroll data.
+ * Attendance can have multiple rows per employee per month (e.g. mid-month transfer); we aggregate them.
  */
 export function generateMonthlyReport(
   employees: Employee[],
@@ -97,11 +119,13 @@ export function generateMonthlyReport(
   payrolls: Payroll[],
   month: string
 ): ReportRow[] {
-  // Create lookup maps
-  const attendanceMap = new Map<string, Attendance>();
+  // Per-employee aggregated attendance (multiple rows per emp/month when transferred between depts)
+  const attendanceByEmp = new Map<string, Attendance[]>();
   for (const a of attendances) {
     if (a.month === month) {
-      attendanceMap.set(a.emp_id, a);
+      const list = attendanceByEmp.get(a.emp_id) ?? [];
+      list.push(a);
+      attendanceByEmp.set(a.emp_id, list);
     }
   }
   
@@ -115,15 +139,16 @@ export function generateMonthlyReport(
   const rows: ReportRow[] = [];
   
   for (const employee of employees) {
-    const attendance = attendanceMap.get(employee.emp_id);
+    const empAttendances = attendanceByEmp.get(employee.emp_id) ?? [];
+    const aggregated = empAttendances.length > 0 ? aggregateAttendanceForReport(empAttendances) : null;
     const payroll = payrollMap.get(employee.emp_id);
     
-    // Get attendance data
-    const worked_days = payroll ? Number(payroll.days_worked ?? 0) : (attendance?.present_days ?? 0);
-    const working_days = attendance?.working_days ?? 0;
-    const normal_ot = Number(attendance?.ot_hours_normal ?? 0);
-    const friday_ot = Number(attendance?.ot_hours_friday ?? 0);
-    const holiday_ot = Number(attendance?.ot_hours_holiday ?? 0);
+    // Get attendance data (aggregated when multiple rows)
+    const worked_days = payroll ? Number(payroll.days_worked ?? 0) : (aggregated?.present_days ?? 0);
+    const working_days = aggregated?.working_days ?? 0;
+    const normal_ot = aggregated?.ot_hours_normal ?? 0;
+    const friday_ot = aggregated?.ot_hours_friday ?? 0;
+    const holiday_ot = aggregated?.ot_hours_holiday ?? 0;
     
     // Base salary calculations
     const master_basic_salary = Number(employee.basic_salary ?? 0);
@@ -168,7 +193,7 @@ export function generateMonthlyReport(
     }
     
     // Get dues earned
-    const dues_earned_calc = Number(attendance?.dues_earned ?? 0);
+    const dues_earned_calc = aggregated?.dues_earned ?? 0;
     
     // Use persisted payroll values if available, otherwise calculated
     const food_allow = payroll ? Number(payroll.food_allowance ?? 0) : food_allow_calc;
@@ -201,7 +226,7 @@ export function generateMonthlyReport(
       deductions,
       gross_salary,
       total_earnings: net_salary,
-      comments: attendance?.comments ?? "",
+      comments: aggregated?.comments ?? "",
       month,
     };
     

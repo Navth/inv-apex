@@ -92,10 +92,12 @@ router.post("/bulk", async (req, res) => {
           invalidIds: invalid.map((r) => r.emp_id),
         });
       }
+      // Replace only this department's slice for this month (keeps other depts' rows for mid-month transfers)
       if (!additive) {
-        const empIds = [...new Set(attendances.map((a) => a.emp_id))];
-        await storage.deleteAttendanceByMonthAndEmpIds(month, empIds);
+        await storage.deleteAttendanceByMonthAndDept(month, deptId);
       }
+      // Tag each record with dept_id so we can replace by dept on future uploads
+      attendances = attendances.map((a) => ({ ...a, dept_id: deptId }));
     } else if (body && typeof body === "object" && body.attendances && body.month) {
       // Object format without dept: { attendances, month } or { attendances, month, additive: true }
       attendances = z.array(insertAttendanceSchema).parse(body.attendances);

@@ -87,10 +87,16 @@ export class MemStorage implements IStorage {
     return this.employees.delete(empId);
   }
 
-  async getAttendance(month?: string): Promise<Attendance[]> {
-    const all = Array.from(this.attendance.values());
-    if (!month) return all;
-    return all.filter((a) => a.month === month);
+  async getAttendance(month?: string, deptId?: number): Promise<Attendance[]> {
+    let all = Array.from(this.attendance.values());
+    if (month) all = all.filter((a) => a.month === month);
+    if (deptId != null) {
+      const deptEmpIds = new Set(
+        Array.from(this.employees.values()).filter((e) => (e as any).dept_id === deptId).map((e) => e.emp_id)
+      );
+      all = all.filter((a) => deptEmpIds.has(a.emp_id));
+    }
+    return all;
   }
 
   async getAttendanceByEmployee(empId: string, month?: string): Promise<Attendance[]> {
@@ -102,6 +108,7 @@ export class MemStorage implements IStorage {
   async createAttendance(attendance: InsertAttendance): Promise<Attendance> {
     const newAttendance: Attendance = {
       id: this.attendanceIdCounter++,
+      dept_id: attendance.dept_id ?? null,
       ot_hours_normal: "0",
       ot_hours_friday: "0",
       ot_hours_holiday: "0",
@@ -134,6 +141,14 @@ export class MemStorage implements IStorage {
 
   async deleteAttendance(id: number): Promise<boolean> {
     return this.attendance.delete(id);
+  }
+
+  async deleteAttendanceByMonthAndDept(month: string, deptId: number): Promise<void> {
+    for (const [id, a] of this.attendance.entries()) {
+      if (a.month === month && a.dept_id != null && a.dept_id === deptId) {
+        this.attendance.delete(id);
+      }
+    }
   }
 
   async getPayroll(month?: string, deptId?: number): Promise<Payroll[]> {
