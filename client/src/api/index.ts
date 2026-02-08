@@ -19,4 +19,4 @@ export { salaryHistoryApi } from './salaryHistory';
 export type { LoginCredentials, LoginResponse, AuthCheckResponse } from './auth';
 export type { PayrollWithContext, PayrollGenerateResponse } from './payroll';
 export type { ReportRow } from './reports';
-export type { EmployeeSalaryHistory, CreateSalaryHistoryRequest, BulkCreateResponse } from './salaryHistory';
+export type { EmployeeSalaryHistory, CreateSalaryHistoryRequest, BulkCreateResponse, BulkImportRecord, BulkImportResponse } from './salaryHistory';

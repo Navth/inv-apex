@@ -33,6 +33,38 @@ type PayrollWithContext = Payroll & {
 // =============================================================================
 
 /**
+ * Ensure salary history exists for the given month for each employee.
+ * If an employee has no history row for this month, create one from current employee data.
+ * This keeps history tracked automatically when payroll is generated (no manual snapshot needed).
+ */
+async function ensureSalaryHistoryForMonth(
+  employees: (Employee & { department_name?: string })[],
+  month: string
+): Promise<void> {
+  for (const emp of employees) {
+    const existing = await storage.getSalaryForMonth(emp.emp_id, month);
+    if (existing) continue;
+    await storage.createSalaryHistory({
+      emp_id: emp.emp_id,
+      basic_salary: emp.basic_salary,
+      other_allowance: emp.other_allowance || "0",
+      food_allowance_amount: emp.food_allowance_amount || "0",
+      food_allowance_type: emp.food_allowance_type || "none",
+      working_hours: emp.working_hours || 8,
+      ot_rate_normal: emp.ot_rate_normal || "0",
+      ot_rate_friday: emp.ot_rate_friday || "0",
+      ot_rate_holiday: emp.ot_rate_holiday || "0",
+      effective_month: month,
+      effective_from_day: null,
+      category: emp.category || "Direct",
+      accommodation: emp.accommodation || "Own",
+      source: "system",
+      notes: "Auto-recorded when payroll was generated",
+    });
+  }
+}
+
+/**
  * Apply salary history to employee data for historical accuracy.
  * Uses salary components and, when present, category and accommodation so food allowance
  * is correct for that month (e.g. migrated historical data).
@@ -193,6 +225,11 @@ router.post("/generate", async (req, res) => {
     const attendances = forDeptOnly
       ? await storage.getAttendance(month, deptIdNum)
       : await storage.getAttendance(month);
+
+    // Automatically ensure salary history for this month (so history is tracked without manual snapshot)
+    if (useHistoricalSalary) {
+      await ensureSalaryHistoryForMonth(employeesWithDept, month);
+    }
     
     // Fetch salary history for the month (if using historical salary)
     // Support mid-month increment: 2+ segments per employee → segment-based proration

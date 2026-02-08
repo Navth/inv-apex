@@ -99,6 +99,88 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
+// Bulk import from migration file (array of records; overwrite optional)
+router.post("/bulk-import", async (req, res) => {
+  try {
+    const { records = [], overwrite = false } = req.body as {
+      records: Array<{
+        emp_id: string;
+        effective_month: string;
+        basic_salary: string | number;
+        other_allowance?: string | number;
+        food_allowance_amount?: string | number;
+        food_allowance_type?: string;
+        working_hours?: number;
+        effective_from_day?: number | null;
+        category?: string;
+        accommodation?: string;
+        notes?: string;
+      }>;
+      overwrite?: boolean;
+    };
+    if (!Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({ error: "records array is required and must not be empty" });
+    }
+    const created: number[] = [];
+    const skipped: string[] = [];
+    const errors: { row: number; emp_id: string; error: string }[] = [];
+    for (let i = 0; i < records.length; i++) {
+      const r = records[i];
+      const emp_id = String(r.emp_id ?? "").trim();
+      const effective_month = String(r.effective_month ?? "").trim();
+      if (!emp_id || !effective_month) {
+        errors.push({ row: i + 1, emp_id: emp_id || "?", error: "Missing emp_id or effective_month" });
+        continue;
+      }
+      const basic_salary = String(r.basic_salary ?? "0");
+      const existing = await storage.getSalaryForMonth(emp_id, effective_month);
+      if (existing && !overwrite) {
+        skipped.push(`${emp_id} (${effective_month})`);
+        continue;
+      }
+      if (existing && overwrite) {
+        await storage.deleteSalaryHistory(existing.id);
+      }
+      try {
+        const row = await storage.createSalaryHistory({
+          emp_id,
+          effective_month,
+          basic_salary,
+          other_allowance: String(r.other_allowance ?? "0"),
+          food_allowance_amount: String(r.food_allowance_amount ?? "0"),
+          food_allowance_type: (r.food_allowance_type as string) || "none",
+          working_hours: typeof r.working_hours === "number" ? r.working_hours : 8,
+          effective_from_day: r.effective_from_day ?? null,
+          category: r.category ?? "Direct",
+          accommodation: r.accommodation ?? "Own",
+          source: "migrated",
+          notes: r.notes ?? "Imported",
+        });
+        created.push(row.id);
+      } catch (err) {
+        errors.push({
+          row: i + 1,
+          emp_id,
+          error: err instanceof Error ? err.message : "Create failed",
+        });
+      }
+    }
+    res.status(201).json({
+      message: `Imported ${created.length} record(s), skipped ${skipped.length}`,
+      created: created.length,
+      skipped: skipped.length,
+      skippedDetails: skipped.slice(0, 20),
+      errors: errors.length ? errors : undefined,
+    });
+  } catch (error) {
+    console.error("Bulk import salary history error:", error);
+    res.status(500).json({
+      error: "Failed to import",
+      details: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
 // Bulk create salary history records for a month (copy from current employee data)
 router.post("/bulk-create/:month", async (req, res) => {
   try {

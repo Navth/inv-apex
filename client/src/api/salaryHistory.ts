@@ -53,6 +53,28 @@ export interface BulkCreateResponse {
   skippedEmpIds: string[];
 }
 
+export interface BulkImportRecord {
+  emp_id: string;
+  effective_month: string;
+  basic_salary: string | number;
+  other_allowance?: string | number;
+  food_allowance_amount?: string | number;
+  food_allowance_type?: string;
+  working_hours?: number;
+  effective_from_day?: number | null;
+  category?: string;
+  accommodation?: string;
+  notes?: string;
+}
+
+export interface BulkImportResponse {
+  message: string;
+  created: number;
+  skipped: number;
+  skippedDetails?: string[];
+  errors?: { row: number; emp_id: string; error: string }[];
+}
+
 export const salaryHistoryApi = {
   /**
    * Get all salary history records for an employee
@@ -111,5 +133,18 @@ export const salaryHistoryApi = {
     return api.post<BulkCreateResponse>(
       `/api/salary-history/bulk-create/${month}?overwrite=${overwrite}`
     );
+  },
+
+  /**
+   * Bulk import from migration file (Excel/CSV parsed on client)
+   */
+  bulkImport: async (
+    records: BulkImportRecord[],
+    overwrite: boolean = false
+  ): Promise<BulkImportResponse> => {
+    return api.post<BulkImportResponse>("/api/salary-history/bulk-import", {
+      records,
+      overwrite,
+    });
   },
 };

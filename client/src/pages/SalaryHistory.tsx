@@ -44,10 +44,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as DayPickerCalendar } from "@/components/ui/calendar";
 import { useToast } from "@/hooks/use-toast";
-import { salaryHistoryApi, employeesApi, EmployeeSalaryHistory } from "@/api";
+import { salaryHistoryApi, employeesApi, EmployeeSalaryHistory, type BulkImportRecord } from "@/api";
+import { parseSalaryHistoryFile } from "@/lib/salaryHistoryParser";
 import {
   Search,
   Calendar,
@@ -61,8 +63,9 @@ import {
   RefreshCw,
   Clock,
   FileText,
-  AlertCircle,
   TrendingUp,
+  Upload,
+  UserSearch,
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -153,6 +156,17 @@ export default function SalaryHistory() {
   const [selectedRecord, setSelectedRecord] = useState<EmployeeSalaryHistory | null>(null);
   const [formData, setFormData] = useState<FormData>(defaultFormData);
   const [submitting, setSubmitting] = useState(false);
+  // Find by employee (view all history for one person)
+  const [employeeSearch, setEmployeeSearch] = useState("");
+  const [employeeHistory, setEmployeeHistory] = useState<EmployeeSalaryHistory[] | null>(null);
+  const [employeeHistoryLoading, setEmployeeHistoryLoading] = useState(false);
+  // Import from file (migration)
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [parsedRecords, setParsedRecords] = useState<BulkImportRecord[]>([]);
+  const [parseErrors, setParseErrors] = useState<string[]>([]);
+  const [importOverwrite, setImportOverwrite] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const formattedMonth = `${selectedMonth}-${selectedYear}`;
 
@@ -172,8 +186,8 @@ export default function SalaryHistory() {
     { value: "12", label: "December" },
   ];
 
-  // Generate year options (last 5 years)
-  const years = Array.from({ length: 5 }, (_, i) => {
+  // Generate year options (last 10 years for migration / past data)
+  const years = Array.from({ length: 10 }, (_, i) => {
     const year = currentDate.getFullYear() - i;
     return { value: String(year), label: String(year) };
   });
@@ -412,16 +426,77 @@ export default function SalaryHistory() {
     (emp) => !salaryRecords.some((r) => r.emp_id === emp.emp_id)
   );
 
+  async function handleFindByEmployee(empId: string) {
+    if (!empId) {
+      setEmployeeHistory(null);
+      return;
+    }
+    setEmployeeHistoryLoading(true);
+    setEmployeeHistory(null);
+    try {
+      const list = await salaryHistoryApi.getByEmployee(empId);
+      setEmployeeHistory(list);
+    } catch {
+      toast({ title: "Error", description: "Failed to load history", variant: "destructive" });
+      setEmployeeHistory(null);
+    } finally {
+      setEmployeeHistoryLoading(false);
+    }
+  }
+
+  async function handleImportFileSelect(file: File | null) {
+    setImportFile(file);
+    setParsedRecords([]);
+    setParseErrors([]);
+    if (!file) return;
+    try {
+      const { records, errors } = await parseSalaryHistoryFile(file);
+      setParsedRecords(records);
+      setParseErrors(errors);
+    } catch (e) {
+      setParseErrors([e instanceof Error ? e.message : "Failed to parse file"]);
+    }
+  }
+
+  async function handleConfirmImport() {
+    if (parsedRecords.length === 0) {
+      toast({ title: "No data", description: "Parse a file first", variant: "destructive" });
+      return;
+    }
+    setImporting(true);
+    try {
+      const res = await salaryHistoryApi.bulkImport(parsedRecords, importOverwrite);
+      toast({
+        title: "Import done",
+        description: res.message + (res.errors?.length ? ` ${res.errors.length} errors.` : ""),
+        variant: res.errors?.length ? "destructive" : "default",
+      });
+      setImportDialogOpen(false);
+      setImportFile(null);
+      setParsedRecords([]);
+      setParseErrors([]);
+      if (formattedMonth) fetchData();
+    } catch (e) {
+      toast({
+        title: "Import failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setImporting(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Salary History</h1>
           <p className="text-muted-foreground mt-1">
-            Manage historical salary snapshots for accurate payroll calculations
+            Salary history is tracked automatically when you generate payroll for a month. View by month below, or use Find by employee to look up anyone. Use Snapshot or Import file to backfill past months or migrated data.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button onClick={handleCreate} className="gap-2">
             <Plus className="h-4 w-4" />
             Add Record
@@ -432,29 +507,85 @@ export default function SalaryHistory() {
             className="gap-2"
           >
             <Download className="h-4 w-4" />
-            Snapshot All
+            Snapshot from current staff
+          </Button>
+          <Button variant="outline" onClick={() => setImportDialogOpen(true)} className="gap-2">
+            <Upload className="h-4 w-4" />
+            Import from file
           </Button>
         </div>
       </div>
 
-      {/* Info Card */}
-      <Card className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950">
-        <CardContent className="flex items-start gap-3 pt-4">
-          <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
-          <div>
-            <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
-              Why Salary History?
-            </p>
-            <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
-              When an employee's salary changes, historical payroll reports would show incorrect
-              values if based on current salary. Salary history records preserve the actual salary
-              at each point in time, ensuring accurate historical reporting and payroll regeneration.
-            </p>
+      {/* Find by employee */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <UserSearch className="h-4 w-4" />
+            Find past data by employee
+          </CardTitle>
+          <CardDescription>Pick an employee to see all their salary history (all months).</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-end gap-3">
+          <div className="min-w-[200px]">
+            <Label className="text-xs text-muted-foreground">Employee</Label>
+            <Select
+              value={employeeSearch}
+              onValueChange={(v) => {
+                setEmployeeSearch(v);
+                handleFindByEmployee(v);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select employee..." />
+              </SelectTrigger>
+              <SelectContent>
+                {employees.map((emp) => (
+                  <SelectItem key={emp.emp_id} value={emp.emp_id}>
+                    {emp.name} ({emp.emp_id})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+          {employeeHistoryLoading && (
+            <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+          )}
+          {employeeHistory && !employeeHistoryLoading && (
+            <div className="w-full mt-2 overflow-x-auto">
+              <p className="text-sm text-muted-foreground mb-2">
+                {employeeHistory.length} record(s) for {employees.find((e) => e.emp_id === employeeSearch)?.name ?? employeeSearch}
+              </p>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Month</TableHead>
+                    <TableHead className="text-right">Basic (KWD)</TableHead>
+                    <TableHead className="text-right">Other</TableHead>
+                    <TableHead>From day</TableHead>
+                    <TableHead>Notes</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {employeeHistory.slice(0, 24).map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell className="font-medium">{r.effective_month}</TableCell>
+                      <TableCell className="text-right">{parseFloat(r.basic_salary).toFixed(2)}</TableCell>
+                      <TableCell className="text-right">{parseFloat(r.other_allowance || "0").toFixed(2)}</TableCell>
+                      <TableCell>{r.effective_from_day ?? "—"}</TableCell>
+                      <TableCell className="text-muted-foreground text-sm max-w-[120px] truncate">{r.notes || "—"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {employeeHistory.length > 24 && (
+                <p className="text-xs text-muted-foreground mt-1">Showing first 24 of {employeeHistory.length}</p>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Filters */}
+      {/* View by month */}
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-col md:flex-row gap-4">
@@ -575,7 +706,7 @@ export default function SalaryHistory() {
               <History className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>No salary history records found for {formattedMonth}</p>
               <p className="text-sm mt-2">
-                Click "Snapshot All" to create records from current employee data
+                History is recorded automatically when you generate payroll for a month. Use Snapshot or Import to backfill past months if needed.
               </p>
             </div>
           ) : (
@@ -659,7 +790,7 @@ export default function SalaryHistory() {
           <DialogHeader>
             <DialogTitle>Add Salary History Record</DialogTitle>
             <DialogDescription>
-              Create a salary snapshot for {formattedMonth}
+              Add a salary record for {formattedMonth} (e.g. mid-month increment or manual correction).
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -1049,10 +1180,9 @@ export default function SalaryHistory() {
       <AlertDialog open={bulkCreateDialogOpen} onOpenChange={setBulkCreateDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Create Salary Snapshot for {formattedMonth}?</AlertDialogTitle>
+            <AlertDialogTitle>Snapshot from current staff for {formattedMonth}</AlertDialogTitle>
             <AlertDialogDescription>
-              This will create salary history records for all employees using their current salary
-              data. Existing records can be preserved or overwritten.
+              Backfill salary history from current employee data (e.g. for a month before you ran payroll). History is normally recorded automatically when you generate payroll. Existing records can be preserved or overwritten.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1070,6 +1200,88 @@ export default function SalaryHistory() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Import from file (migration) */}
+      <Dialog open={importDialogOpen} onOpenChange={(o) => { setImportDialogOpen(o); if (!o) { setImportFile(null); setParsedRecords([]); setParseErrors([]); } }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="h-5 w-5" />
+              Import from file (migration)
+            </DialogTitle>
+            <DialogDescription>
+              Upload an Excel or CSV file. Required columns: <strong>Employee ID</strong>, <strong>Effective Month</strong> (MM-YYYY), <strong>Basic Salary</strong>. Optional: Other Allowance, Food Allowance, Working Hours, From Day, Notes. Header names can vary (e.g. &quot;emp_id&quot;, &quot;Emp ID&quot;, &quot;Month&quot;, &quot;effective_month&quot;).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="flex items-center gap-2">
+              <Input
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="max-w-sm"
+                onChange={(e) => handleImportFileSelect(e.target.files?.[0] ?? null)}
+              />
+              {importFile && <span className="text-sm text-muted-foreground truncate">{importFile.name}</span>}
+            </div>
+            {parseErrors.length > 0 && (
+              <div className="rounded-md bg-destructive/10 text-destructive text-sm p-2">
+                {parseErrors.slice(0, 5).map((err, i) => <div key={i}>{err}</div>)}
+                {parseErrors.length > 5 && <div>... and {parseErrors.length - 5} more</div>}
+              </div>
+            )}
+            {parsedRecords.length > 0 && (
+              <>
+                <p className="text-sm font-medium">
+                  {parsedRecords.length} record(s) ready to import. Preview:
+                </p>
+                <div className="border rounded-md overflow-x-auto max-h-48 overflow-y-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Emp ID</TableHead>
+                        <TableHead>Month</TableHead>
+                        <TableHead className="text-right">Basic</TableHead>
+                        <TableHead className="text-right">Other</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {parsedRecords.slice(0, 10).map((r, i) => (
+                        <TableRow key={i}>
+                          <TableCell className="font-mono text-sm">{r.emp_id}</TableCell>
+                          <TableCell>{r.effective_month}</TableCell>
+                          <TableCell className="text-right">{r.basic_salary}</TableCell>
+                          <TableCell className="text-right">{r.other_allowance ?? "0"}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="import-overwrite"
+                    checked={importOverwrite}
+                    onCheckedChange={(c) => setImportOverwrite(!!c)}
+                  />
+                  <label htmlFor="import-overwrite" className="text-sm cursor-pointer">
+                    Overwrite existing records for same employee + month
+                  </label>
+                </div>
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImportDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmImport}
+              disabled={parsedRecords.length === 0 || importing}
+            >
+              {importing ? "Importing..." : `Import ${parsedRecords.length} record(s)`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
