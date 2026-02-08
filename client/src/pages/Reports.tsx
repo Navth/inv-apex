@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Download, FileSpreadsheet, FileText, RefreshCw } from "lucide-react";
-import * as XLSX from "xlsx";
+import { buildStyledExcel, downloadStyledExcel } from "@/lib/excelExport";
 import { reportsApi } from "@/api/reports";
 
 export default function Reports() {
@@ -104,7 +104,7 @@ export default function Reports() {
     );
   };
 
-  const handleDownloadExcel = () => {
+  const handleDownloadExcel = async () => {
     if (rows.length === 0) {
       alert("No data to export");
       return;
@@ -172,19 +172,20 @@ excelData.push(totalRow);
 
 
 
-    const worksheet = XLSX.utils.json_to_sheet(excelData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Report");
-
-    const maxWidths: number[] = [];
-    selectedColumns.forEach((colId, idx) => {
+    const headers = selectedColumns.map((colId) => columnMap[colId] || colId);
+    const maxWidths = selectedColumns.map((colId) => {
       const label = columnMap[colId] || colId;
-      maxWidths[idx] = Math.max(label.length, 15);
+      return Math.max(label.length, 14);
     });
-    worksheet["!cols"] = maxWidths.map((w) => ({ wch: w }));
 
+    const buffer = await buildStyledExcel({
+      sheetName: "Report",
+      headers,
+      rows: excelData,
+      columnWidths: maxWidths,
+    });
     const filename = `Salary_Report_${selectedMonth}.xlsx`;
-    XLSX.writeFile(workbook, filename);
+    downloadStyledExcel(buffer, filename);
   };
 
   const handleDownloadCSV = () => {
@@ -222,9 +223,9 @@ excelData.push(totalRow);
     URL.revokeObjectURL(url);
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (format === "excel") {
-      handleDownloadExcel();
+      await handleDownloadExcel();
     } else {
       handleDownloadCSV();
     }

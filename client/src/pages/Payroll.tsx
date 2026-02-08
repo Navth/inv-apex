@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Calculator, RefreshCw } from "lucide-react";
-import * as XLSX from "xlsx";
+import { buildStyledExcel, downloadStyledExcel } from "@/lib/excelExport";
 import { payrollApi } from "@/api/payroll";
 import { deptApi } from "@/api/dept";
 import type { Dept } from "@shared/schema";
@@ -164,9 +164,21 @@ export default function Payroll() {
     // First save the data silently
     await handleSave(data, true);
 
-    // Generate Excel
+    // Generate styled Excel (colored columns)
     try {
-      const exportData = data.map(row => ({
+      const headers = [
+        "Emp ID",
+        "Employee Name",
+        "Days Worked",
+        "Basic Salary",
+        "OT Amount",
+        "Food Allowance",
+        "Gross Salary",
+        "Deductions",
+        "Net Salary",
+        "Comments",
+      ];
+      const exportData = data.map((row) => ({
         "Emp ID": row.emp_id,
         "Employee Name": row.name || "",
         "Days Worked": Number(row.days_worked ?? 0),
@@ -176,15 +188,17 @@ export default function Payroll() {
         "Gross Salary": Number(row.gross_salary),
         "Deductions": Number(row.deductions),
         "Net Salary": Number(row.net_salary),
-        "Comments": row.comments || ""
+        "Comments": row.comments || "",
       }));
 
-      const worksheet = XLSX.utils.json_to_sheet(exportData);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Payroll");
-      
+      const buffer = await buildStyledExcel({
+        sheetName: "Payroll",
+        headers,
+        rows: exportData,
+        columnWidths: [12, 22, 12, 14, 12, 16, 14, 12, 12, 24],
+      });
       const filename = `Payroll_${selectedMonth}.xlsx`;
-      XLSX.writeFile(workbook, filename);
+      downloadStyledExcel(buffer, filename);
 
       // Reset state to accommodate next action
       setPayrollData([]);
