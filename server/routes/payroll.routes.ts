@@ -4,12 +4,12 @@
 
 import { Router } from "express";
 import { storage } from "../storage";
-import type { Payroll, Attendance, Employee, EmployeeSalaryHistory } from "@shared/schema";
-import { 
-  generatePayroll, 
+import type { Payroll, Attendance, Employee, EmployeeSalaryHistory, InsertPayroll } from "@shared/schema";
+import {
+  generatePayroll,
   aggregateAttendance,
   getPayrollDebugInfo,
-  logPayrollDebugInfo 
+  logPayrollDebugInfo,
 } from "../services/payroll.service";
 import { PAYROLL_DEFAULTS } from "../config/constants";
 
@@ -33,21 +33,14 @@ type PayrollWithContext = Payroll & {
 // =============================================================================
 
 /**
- * Apply salary history to employee data for historical accuracy
- * If salary history exists for the month, use those values; otherwise use current employee values
+ * Apply salary history to employee data for historical accuracy.
+ * Uses salary components and, when present, category and accommodation so food allowance
+ * is correct for that month (e.g. migrated historical data).
  */
 function applyHistoricalSalary(
-  employee: Employee, 
-  salaryHistoryMap: Map<string, EmployeeSalaryHistory>
+  employee: Employee,
+  history: EmployeeSalaryHistory
 ): Employee {
-  const history = salaryHistoryMap.get(employee.emp_id);
-  
-  if (!history) {
-    // No historical record, use current employee data
-    return employee;
-  }
-  
-  // Merge historical salary data with employee data
   return {
     ...employee,
     basic_salary: history.basic_salary,
@@ -58,6 +51,8 @@ function applyHistoricalSalary(
     ot_rate_normal: history.ot_rate_normal,
     ot_rate_friday: history.ot_rate_friday,
     ot_rate_holiday: history.ot_rate_holiday,
+    ...(history.category != null && history.category !== "" && { category: history.category }),
+    ...(history.accommodation != null && history.accommodation !== "" && { accommodation: history.accommodation }),
   };
 }
 
@@ -178,12 +173,12 @@ router.patch("/:empId", async (req, res) => {
  */
 router.post("/generate", async (req, res) => {
   try {
-    const { month, useHistoricalSalary = true, dept_id: deptId } = req.body;
-    
+    const { month, useHistoricalSalary = true, overwrite_migrated: overwriteMigrated = false, dept_id: deptId } = req.body;
+
     if (!month) {
       return res.status(400).json({ error: "Month is required" });
     }
-    
+
     const deptIdNum = deptId != null ? parseInt(String(deptId), 10) : undefined;
     const forDeptOnly = deptIdNum != null && !isNaN(deptIdNum);
     
@@ -200,33 +195,54 @@ router.post("/generate", async (req, res) => {
       : await storage.getAttendance(month);
     
     // Fetch salary history for the month (if using historical salary)
+    // Support mid-month increment: 2+ segments per employee → segment-based proration
     let employeesWithSalary = employeesWithDept;
     let usedHistoricalSalary = false;
-    
+    const salarySegmentsMap = new Map<string, EmployeeSalaryHistory[]>();
+
     if (useHistoricalSalary) {
-      const salaryHistory = await storage.getAllSalariesForMonth(month);
-      
-      if (salaryHistory.length > 0) {
-        const salaryHistoryMap = new Map(
-          salaryHistory.map(s => [s.emp_id, s])
-        );
-        employeesWithSalary = employeesWithDept.map(emp => ({
-          ...applyHistoricalSalary(emp, salaryHistoryMap),
-          department_name: emp.department_name,
-        }));
-        usedHistoricalSalary = true;
-        
-        if (process.env.NODE_ENV !== 'production') {
-          console.log(`[Payroll] Using historical salary data for ${salaryHistory.length} employees`);
-        }
-      } else {
-        if (process.env.NODE_ENV !== 'production') {
-          console.log(`[Payroll] No historical salary data found for ${month}, using current employee salaries`);
+      const built: (Employee & { department_name?: string })[] = [];
+      let anyHistorical = false;
+      for (const emp of employeesWithDept) {
+        const segments = await storage.getSalarySegmentsForMonth(emp.emp_id, month);
+        if (segments.length >= 2) {
+          built.push({ ...emp, department_name: emp.department_name });
+          salarySegmentsMap.set(emp.emp_id, segments);
+          anyHistorical = true;
+        } else if (segments.length === 1) {
+          built.push({
+            ...applyHistoricalSalary(emp, segments[0]),
+            department_name: emp.department_name,
+          });
+          anyHistorical = true;
+        } else {
+          const effective = await storage.getEffectiveSalaryForMonth(emp.emp_id, month);
+          if (effective) {
+            built.push({
+              ...applyHistoricalSalary(emp, effective),
+              department_name: emp.department_name,
+            });
+            anyHistorical = true;
+          } else {
+            built.push({ ...emp, department_name: emp.department_name });
+          }
         }
       }
+      employeesWithSalary = built;
+      usedHistoricalSalary = anyHistorical;
+      if (process.env.NODE_ENV !== "production" && (anyHistorical || salarySegmentsMap.size > 0)) {
+        console.log(
+          `[Payroll] Historical salary: ${built.length} employees, ${salarySegmentsMap.size} with mid-month increment`
+        );
+      }
     }
-    
-    const { payrolls, errors } = generatePayroll(employeesWithSalary, attendances, month);
+
+    const { payrolls, errors } = generatePayroll(
+      employeesWithSalary,
+      attendances,
+      month,
+      salarySegmentsMap.size > 0 ? salarySegmentsMap : undefined
+    );
     
     if (process.env.NODE_ENV !== 'production') {
       for (const employee of employeesWithSalary) {
@@ -251,14 +267,26 @@ router.post("/generate", async (req, res) => {
       });
     }
     
+    // When overwrite_migrated is false, only remove calculated payroll; keep source='migrated' rows
     if (forDeptOnly) {
       const deptEmpIds = employeesWithDept.map((e) => e.emp_id);
-      await storage.deletePayrollForEmployees(month, deptEmpIds);
+      const existing = await storage.getPayroll(month, deptIdNum);
+      const toDelete = overwriteMigrated
+        ? deptEmpIds
+        : existing.filter((p) => (p as { source?: string }).source !== "migrated").map((p) => p.emp_id);
+      if (toDelete.length > 0) {
+        await storage.deletePayrollForEmployees(month, toDelete);
+      }
     } else {
-      await storage.deletePayroll(month);
+      if (overwriteMigrated) {
+        await storage.deletePayroll(month);
+      } else {
+        await storage.deletePayrollCalculatedOnly(month);
+      }
     }
-    
-    const created = await storage.bulkCreatePayroll(payrolls);
+
+    const payrollsWithSource = payrolls.map((p) => ({ ...p, source: "calculated" as const }));
+    const created = await storage.bulkCreatePayroll(payrollsWithSource);
     
     const response: any = { 
       created,
@@ -281,9 +309,57 @@ router.post("/generate", async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error("Payroll generation error:", error);
-    res.status(500).json({ 
-      error: "Failed to generate payroll", 
-      details: error instanceof Error ? error.message : String(error) 
+    res.status(500).json({
+      error: "Failed to generate payroll",
+      details: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+/**
+ * POST /api/payroll/import
+ * Bulk import historical (migrated) payroll. Each record is stored with source='migrated'
+ * so it is not overwritten by "Generate payroll" unless overwrite_migrated=true.
+ * Body: { payrolls: Array<{ emp_id, month, basic_salary, ot_amount?, food_allowance?, gross_salary, deductions?, net_salary, days_worked?, dues_earned? }> }
+ */
+router.post("/import", async (req, res) => {
+  try {
+    const { payrolls: rawPayrolls } = req.body as { payrolls: Record<string, unknown>[] };
+    if (!Array.isArray(rawPayrolls) || rawPayrolls.length === 0) {
+      return res.status(400).json({ error: "payrolls array is required and must not be empty" });
+    }
+    const payrolls: InsertPayroll[] = rawPayrolls.map((p: Record<string, unknown>) => ({
+      emp_id: String(p.emp_id),
+      month: String(p.month),
+      basic_salary: String(p.basic_salary ?? 0),
+      ot_amount: String(p.ot_amount ?? 0),
+      food_allowance: String(p.food_allowance ?? 0),
+      gross_salary: String(p.gross_salary ?? 0),
+      deductions: String(p.deductions ?? 0),
+      net_salary: String(p.net_salary ?? 0),
+      days_worked: typeof p.days_worked === "number" ? p.days_worked : 0,
+      dues_earned: String(p.dues_earned ?? 0),
+      source: "migrated",
+    }));
+    const byMonth = new Map<string, string[]>();
+    for (const p of payrolls) {
+      const empIds = byMonth.get(p.month) ?? [];
+      if (!empIds.includes(p.emp_id)) empIds.push(p.emp_id);
+      byMonth.set(p.month, empIds);
+    }
+    for (const [month, empIds] of byMonth) {
+      await storage.deletePayrollForEmployees(month, empIds);
+    }
+    const created = await storage.bulkCreatePayroll(payrolls);
+    res.status(201).json({
+      message: `Imported ${created.length} historical payroll record(s) (source=migrated)`,
+      count: created.length,
+    });
+  } catch (error) {
+    console.error("Payroll import error:", error);
+    res.status(500).json({
+      error: "Failed to import payroll",
+      details: error instanceof Error ? error.message : String(error),
     });
   }
 });

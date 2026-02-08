@@ -5,7 +5,7 @@
  * It provides a clean interface for generating payroll from employee and attendance data.
  */
 
-import type { Employee, Attendance, InsertPayroll } from "@shared/schema";
+import type { Employee, Attendance, InsertPayroll, EmployeeSalaryHistory } from "@shared/schema";
 import {
   KUWAIT_WORKING_DAYS_PER_MONTH,
   DEFAULT_WORKING_HOURS_PER_DAY,
@@ -281,8 +281,121 @@ export function calculateFoodAllowance(employee: Employee, actualPresentDays: nu
 }
 
 // =============================================================================
+// HELPERS FOR MID-MONTH INCREMENT
+// =============================================================================
+
+/** Parse MM-YYYY and return [month1based, year] and number of days in that month */
+function parseMonthAndDays(monthStr: string): { month: number; year: number; daysInMonth: number } {
+  const [mm, yyyy] = monthStr.split("-").map(Number);
+  const year = yyyy!;
+  const month = mm!;
+  const lastDay = new Date(year, month, 0); // day 0 of next month = last day of this month
+  const daysInMonth = lastDay.getDate();
+  return { month, year, daysInMonth };
+}
+
+/** Build calendar-day fractions per segment. Segments ordered by effective_from_day (null = 1). */
+function getSegmentDayFractions(
+  segments: EmployeeSalaryHistory[],
+  daysInMonth: number
+): number[] {
+  const fractions: number[] = [];
+  for (let i = 0; i < segments.length; i++) {
+    const startDay = segments[i].effective_from_day ?? 1;
+    const endDay =
+      i < segments.length - 1
+        ? (segments[i + 1].effective_from_day ?? daysInMonth + 1) - 1
+        : daysInMonth;
+    const daysInSegment = Math.max(0, endDay - startDay + 1);
+    fractions.push(daysInSegment / daysInMonth);
+  }
+  return fractions;
+}
+
+/** Merge a salary history record into base employee for use in calculations */
+function employeeFromSegment(base: Employee, segment: EmployeeSalaryHistory): Employee {
+  return {
+    ...base,
+    basic_salary: segment.basic_salary,
+    other_allowance: segment.other_allowance,
+    food_allowance_amount: segment.food_allowance_amount,
+    food_allowance_type: segment.food_allowance_type,
+    working_hours: segment.working_hours,
+    ot_rate_normal: segment.ot_rate_normal,
+    ot_rate_friday: segment.ot_rate_friday,
+    ot_rate_holiday: segment.ot_rate_holiday,
+    ...(segment.category != null && segment.category !== "" && { category: segment.category }),
+    ...(segment.accommodation != null && segment.accommodation !== "" && { accommodation: segment.accommodation }),
+  };
+}
+
+// =============================================================================
 // MAIN PAYROLL CALCULATION
 // =============================================================================
+
+/**
+ * Calculate payroll when there are multiple salary segments in the month (mid-month increment).
+ * Splits worked days and OT hours by calendar-day proportion, prorates each segment, and totals.
+ */
+export function calculateEmployeePayrollWithSegments(
+  baseEmployee: Employee,
+  segments: EmployeeSalaryHistory[],
+  attendance: AggregatedAttendance,
+  month: string
+): PayrollCalculationResult {
+  const { daysInMonth } = parseMonthAndDays(month);
+  const fractions = getSegmentDayFractions(segments, daysInMonth);
+  const { actualPresentDays, otHoursNormal, otHoursFriday, otHoursHoliday, duesEarned } = attendance;
+
+  let totalProratedBasic = 0;
+  let totalProratedOther = 0;
+  let totalFoodAllowance = 0;
+  let totalOTPay = 0;
+  let allocatedDays = 0;
+
+  for (let i = 0; i < segments.length; i++) {
+    const fraction = fractions[i] ?? 0;
+    if (fraction <= 0) continue;
+    const workedForSegment =
+      i < segments.length - 1
+        ? actualPresentDays * fraction
+        : actualPresentDays - allocatedDays;
+    allocatedDays += workedForSegment;
+    const segmentEmployee = employeeFromSegment(baseEmployee, segments[i]);
+    const cappedWorked = capWorkingDaysAtMax(workedForSegment);
+    totalProratedBasic += calculateProratedAmount(
+      parseFloat(segments[i].basic_salary),
+      workedForSegment
+    );
+    totalProratedOther += calculateProratedAmount(
+      parseFloat(segments[i].other_allowance || "0"),
+      workedForSegment
+    );
+    totalFoodAllowance += calculateFoodAllowance(segmentEmployee, workedForSegment);
+    const otNorm = otHoursNormal * fraction;
+    const otFri = otHoursFriday * fraction;
+    const otHol = otHoursHoliday * fraction;
+    const ot = calculateOT(segmentEmployee, otNorm, otFri, otHol);
+    totalOTPay += ot.pay.total;
+  }
+
+  const grossSalary = totalProratedBasic + totalProratedOther + totalFoodAllowance + totalOTPay;
+  const deductions = 0;
+  const netSalary = Math.round(grossSalary + duesEarned - deductions);
+
+  return {
+    emp_id: baseEmployee.emp_id,
+    month,
+    basic_salary: totalProratedBasic.toFixed(2),
+    ot_amount: totalOTPay.toFixed(2),
+    food_allowance: totalFoodAllowance.toFixed(2),
+    days_worked: Math.round(capWorkingDaysAtMax(actualPresentDays)),
+    gross_salary: grossSalary.toFixed(2),
+    deductions: deductions.toFixed(2),
+    dues_earned: duesEarned.toFixed(2),
+    net_salary: netSalary.toFixed(2),
+  };
+}
 
 /**
  * Calculate payroll for a single employee.
@@ -335,35 +448,38 @@ export function calculateEmployeePayroll(
 }
 
 /**
- * Generate payroll for all active employees
+ * Generate payroll for all active employees.
+ * When salarySegmentsMap has 2+ segments for an employee, uses mid-month increment calculation.
  */
 export function generatePayroll(
   employees: Employee[],
   attendances: Attendance[],
-  month: string
+  month: string,
+  salarySegmentsMap?: Map<string, EmployeeSalaryHistory[]>
 ): PayrollGenerationResult {
   const payrolls: PayrollCalculationResult[] = [];
   const errors: PayrollError[] = [];
-  
+  const segmentsMap = salarySegmentsMap ?? new Map();
+
   // Create attendance lookup map
   const attendanceMap = new Map<string, Attendance[]>();
   for (const att of attendances) {
     if (att.month !== month) continue;
-    
+
     const existing = attendanceMap.get(att.emp_id) || [];
     existing.push(att);
     attendanceMap.set(att.emp_id, existing);
   }
-  
+
   for (const employee of employees) {
     // Skip inactive employees
     if (employee.status !== "active") {
       continue;
     }
-    
+
     // Get attendance records for this employee
     const empAttendances = attendanceMap.get(employee.emp_id);
-    
+
     if (!empAttendances || empAttendances.length === 0) {
       errors.push({
         emp_id: employee.emp_id,
@@ -372,10 +488,10 @@ export function generatePayroll(
       });
       continue;
     }
-    
+
     // Aggregate attendance
     const aggregated = aggregateAttendance(empAttendances);
-    
+
     // Validate attendance data
     if (aggregated.workingDays === 0) {
       errors.push({
@@ -385,7 +501,7 @@ export function generatePayroll(
       });
       continue;
     }
-    
+
     if (aggregated.actualPresentDays === 0) {
       errors.push({
         emp_id: employee.emp_id,
@@ -394,12 +510,16 @@ export function generatePayroll(
       });
       continue;
     }
-    
-    // Calculate payroll
-    const payroll = calculateEmployeePayroll(employee, aggregated, month);
+
+    // Mid-month increment: 2+ segments → segment-based calculation
+    const segments = segmentsMap.get(employee.emp_id);
+    const payroll =
+      segments && segments.length >= 2
+        ? calculateEmployeePayrollWithSegments(employee, segments, aggregated, month)
+        : calculateEmployeePayroll(employee, aggregated, month);
     payrolls.push(payroll);
   }
-  
+
   return { payrolls, errors };
 }
 

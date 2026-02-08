@@ -20,6 +20,10 @@ export interface EmployeeSalaryHistory {
   ot_rate_friday: string;
   ot_rate_holiday: string;
   effective_month: string;
+  effective_from_day: number | null;
+  category: string;
+  accommodation: string;
+  source: "system" | "migrated";
   created_at: string;
   notes: string | null;
 }
@@ -35,6 +39,10 @@ export interface CreateSalaryHistoryRequest {
   ot_rate_friday?: string;
   ot_rate_holiday?: string;
   effective_month: string;
+  effective_from_day?: number | null;
+  category?: string;
+  accommodation?: string;
+  source?: "system" | "migrated";
   notes?: string;
 }
 

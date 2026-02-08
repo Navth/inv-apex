@@ -162,6 +162,7 @@ export class MemStorage implements IStorage {
       deductions: "0",
       days_worked: 0,
       dues_earned: "0",
+      source: "calculated",
       ...payroll,
       generated_at: new Date(),
     };
@@ -190,6 +191,15 @@ export class MemStorage implements IStorage {
   async deletePayroll(month: string): Promise<void> {
     const toDelete = Array.from(this.payrolls.entries())
       .filter(([, p]) => p.month === month)
+      .map(([id]) => id);
+    for (const id of toDelete) {
+      this.payrolls.delete(id);
+    }
+  }
+
+  async deletePayrollCalculatedOnly(month: string): Promise<void> {
+    const toDelete = Array.from(this.payrolls.entries())
+      .filter(([, p]) => p.month === month && (p as Payroll & { source?: string }).source !== "migrated")
       .map(([id]) => id);
     for (const id of toDelete) {
       this.payrolls.delete(id);
@@ -282,6 +292,20 @@ export class MemStorage implements IStorage {
     );
   }
 
+  async getEffectiveSalaryForMonth(empId: string, month: string): Promise<EmployeeSalaryHistory | undefined> {
+    const candidates = Array.from(this.salaryHistory.values())
+      .filter((h) => h.emp_id === empId && h.effective_month <= month)
+      .sort((a, b) => b.effective_month.localeCompare(a.effective_month));
+    return candidates[0];
+  }
+
+  async getSalarySegmentsForMonth(empId: string, month: string): Promise<EmployeeSalaryHistory[]> {
+    const rows = Array.from(this.salaryHistory.values()).filter(
+      (h) => h.emp_id === empId && h.effective_month === month
+    );
+    return rows.sort((a, b) => (a.effective_from_day ?? 1) - (b.effective_from_day ?? 1));
+  }
+
   async getAllSalariesForMonth(month: string): Promise<EmployeeSalaryHistory[]> {
     return Array.from(this.salaryHistory.values()).filter((h) => h.effective_month === month);
   }
@@ -296,6 +320,10 @@ export class MemStorage implements IStorage {
       ot_rate_normal: "0",
       ot_rate_friday: "0",
       ot_rate_holiday: "0",
+      effective_from_day: null,
+      category: "Direct",
+      accommodation: "Own",
+      source: "system",
       notes: null,
       ...data,
       created_at: new Date(),

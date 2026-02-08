@@ -58,6 +58,7 @@ export interface IStorage {
   bulkCreatePayroll(payrolls: InsertPayroll[]): Promise<Payroll[]>;
   updatePayroll(empId: string, month: string, payroll: Partial<InsertPayroll>): Promise<Payroll | undefined>;
   deletePayroll(month: string): Promise<void>;
+  deletePayrollCalculatedOnly(month: string): Promise<void>;
   deletePayrollForEmployees(month: string, empIds: string[]): Promise<void>;
 
   // Leaves
@@ -76,6 +77,8 @@ export interface IStorage {
   // Employee Salary History
   getSalaryHistory(empId: string): Promise<EmployeeSalaryHistory[]>;
   getSalaryForMonth(empId: string, month: string): Promise<EmployeeSalaryHistory | undefined>;
+  getEffectiveSalaryForMonth(empId: string, month: string): Promise<EmployeeSalaryHistory | undefined>;
+  getSalarySegmentsForMonth(empId: string, month: string): Promise<EmployeeSalaryHistory[]>;
   getAllSalariesForMonth(month: string): Promise<EmployeeSalaryHistory[]>;
   createSalaryHistory(history: InsertEmployeeSalaryHistory): Promise<EmployeeSalaryHistory>;
   updateSalaryHistory(id: number, updates: Partial<InsertEmployeeSalaryHistory>): Promise<EmployeeSalaryHistory | undefined>;

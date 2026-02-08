@@ -141,6 +141,10 @@ router.post("/bulk-create/:month", async (req, res) => {
         ot_rate_friday: employee.ot_rate_friday || "0",
         ot_rate_holiday: employee.ot_rate_holiday || "0",
         effective_month: month,
+        effective_from_day: null,
+        category: employee.category || "Direct",
+        accommodation: employee.accommodation || "Own",
+        source: "system",
         notes: `Snapshot from employee data`,
       });
       

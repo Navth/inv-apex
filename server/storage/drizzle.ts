@@ -1,4 +1,4 @@
-import { and, eq, desc, inArray } from "drizzle-orm";
+import { and, eq, desc, inArray, lte, ne } from "drizzle-orm";
 import {
   users,
   dept as deptTable,
@@ -208,6 +208,13 @@ export class DrizzleStorage implements IStorage {
     await this.db.delete(payrollTable).where(eq(payrollTable.month, month));
   }
 
+  /** Delete only calculated payroll for a month; leaves source='migrated' rows intact */
+  async deletePayrollCalculatedOnly(month: string): Promise<void> {
+    await this.db
+      .delete(payrollTable)
+      .where(and(eq(payrollTable.month, month), ne(payrollTable.source, "migrated")));
+  }
+
   async deletePayrollForEmployees(month: string, empIds: string[]): Promise<void> {
     if (empIds.length === 0) return;
     await this.db
@@ -276,11 +283,31 @@ export class DrizzleStorage implements IStorage {
     return rows[0];
   }
 
+  /** Get effective salary for a month: exact effective_month match, or latest with effective_month <= month (for historical migration) */
+  async getEffectiveSalaryForMonth(empId: string, month: string): Promise<EmployeeSalaryHistory | undefined> {
+    const rows = await this.db
+      .select()
+      .from(employeeSalaryHistory)
+      .where(and(eq(employeeSalaryHistory.emp_id, empId), lte(employeeSalaryHistory.effective_month, month)))
+      .orderBy(desc(employeeSalaryHistory.effective_month))
+      .limit(1);
+    return rows[0];
+  }
+
   async getAllSalariesForMonth(month: string): Promise<EmployeeSalaryHistory[]> {
     return await this.db
       .select()
       .from(employeeSalaryHistory)
       .where(eq(employeeSalaryHistory.effective_month, month));
+  }
+
+  /** Salary segments for a month (for mid-month increment). Ordered by effective_from_day (null = 1). */
+  async getSalarySegmentsForMonth(empId: string, month: string): Promise<EmployeeSalaryHistory[]> {
+    const rows = await this.db
+      .select()
+      .from(employeeSalaryHistory)
+      .where(and(eq(employeeSalaryHistory.emp_id, empId), eq(employeeSalaryHistory.effective_month, month)));
+    return rows.sort((a, b) => (a.effective_from_day ?? 1) - (b.effective_from_day ?? 1));
   }
 
   async createSalaryHistory(data: InsertEmployeeSalaryHistory): Promise<EmployeeSalaryHistory> {

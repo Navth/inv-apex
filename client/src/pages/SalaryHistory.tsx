@@ -85,6 +85,7 @@ interface FormData {
   ot_rate_friday: string;
   ot_rate_holiday: string;
   effective_month: string;
+  effective_from_day: string;
   notes: string;
 }
 
@@ -99,6 +100,7 @@ const defaultFormData: FormData = {
   ot_rate_friday: "0",
   ot_rate_holiday: "0",
   effective_month: "",
+  effective_from_day: "",
   notes: "",
 };
 
@@ -216,6 +218,7 @@ export default function SalaryHistory() {
       ot_rate_friday: record.ot_rate_friday || "0",
       ot_rate_holiday: record.ot_rate_holiday || "0",
       effective_month: record.effective_month,
+      effective_from_day: record.effective_from_day != null ? String(record.effective_from_day) : "",
       notes: record.notes || "",
     });
     setEditDialogOpen(true);
@@ -270,6 +273,10 @@ export default function SalaryHistory() {
         ot_rate_friday: formData.ot_rate_friday,
         ot_rate_holiday: formData.ot_rate_holiday,
         effective_month: formData.effective_month,
+        effective_from_day:
+          formData.effective_from_day.trim() !== ""
+            ? Math.min(31, Math.max(1, parseInt(formData.effective_from_day, 10) || 1))
+            : undefined,
         notes: formData.notes || undefined,
       });
       toast({
@@ -305,6 +312,10 @@ export default function SalaryHistory() {
         ot_rate_normal: formData.ot_rate_normal,
         ot_rate_friday: formData.ot_rate_friday,
         ot_rate_holiday: formData.ot_rate_holiday,
+        effective_from_day:
+          formData.effective_from_day.trim() !== ""
+            ? Math.min(31, Math.max(1, parseInt(formData.effective_from_day, 10) || 1))
+            : null,
         notes: formData.notes || undefined,
       });
       toast({
@@ -702,18 +713,36 @@ export default function SalaryHistory() {
                 </Select>
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Working Hours / Day</Label>
-              <Input
-                type="number"
-                value={formData.working_hours}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    working_hours: parseInt(e.target.value) || 8,
-                  })
-                }
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Working Hours / Day</Label>
+                <Input
+                  type="number"
+                  value={formData.working_hours}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      working_hours: parseInt(e.target.value) || 8,
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Effective from day (1–31)</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={31}
+                  placeholder="Whole month if empty"
+                  value={formData.effective_from_day}
+                  onChange={(e) =>
+                    setFormData({ ...formData, effective_from_day: e.target.value })
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  For mid-month increment: from which day this salary applies. Leave empty for full month.
+                </p>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Notes</Label>
@@ -802,18 +831,36 @@ export default function SalaryHistory() {
                 </Select>
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Working Hours / Day</Label>
-              <Input
-                type="number"
-                value={formData.working_hours}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    working_hours: parseInt(e.target.value) || 8,
-                  })
-                }
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Working Hours / Day</Label>
+                <Input
+                  type="number"
+                  value={formData.working_hours}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      working_hours: parseInt(e.target.value) || 8,
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Effective from day (1–31)</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={31}
+                  placeholder="Whole month if empty"
+                  value={formData.effective_from_day}
+                  onChange={(e) =>
+                    setFormData({ ...formData, effective_from_day: e.target.value })
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  For mid-month increment: from which day this salary applies.
+                </p>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Notes</Label>
