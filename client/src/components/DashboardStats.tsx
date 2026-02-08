@@ -100,7 +100,7 @@ export default function DashboardStats() {
       />
       <StatsCard
         title="Monthly Payroll"
-        value={`₹${stats.payroll.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+        value={stats.payroll.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " KWD"}
         icon={<DollarSign className="h-4 w-4" />}
         trend=""
       />
