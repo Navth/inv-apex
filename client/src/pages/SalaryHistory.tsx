@@ -44,11 +44,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as DayPickerCalendar } from "@/components/ui/calendar";
 import { useToast } from "@/hooks/use-toast";
 import { salaryHistoryApi, employeesApi, EmployeeSalaryHistory } from "@/api";
 import {
   Search,
   Calendar,
+  CalendarIcon,
   DollarSign,
   Plus,
   Pencil,
@@ -59,7 +62,10 @@ import {
   Clock,
   FileText,
   AlertCircle,
+  TrendingUp,
 } from "lucide-react";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 interface Employee {
   emp_id: string;
@@ -103,6 +109,23 @@ const defaultFormData: FormData = {
   effective_from_day: "",
   notes: "",
 };
+
+/** Get first day of month from MM-YYYY for calendar */
+function getMonthStart(formattedMonth: string): Date | null {
+  if (!formattedMonth || !/^\d{2}-\d{4}$/.test(formattedMonth)) return null;
+  const [mm, yyyy] = formattedMonth.split("-").map(Number);
+  return new Date(yyyy!, mm! - 1, 1);
+}
+
+/** Get selected date for increment (from effective_month + effective_from_day) */
+function getIncrementDate(formattedMonth: string, effectiveFromDay: string): Date | undefined {
+  const start = getMonthStart(formattedMonth);
+  if (!start || !effectiveFromDay.trim()) return undefined;
+  const day = Math.min(31, Math.max(1, parseInt(effectiveFromDay, 10) || 1));
+  const lastDay = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
+  const safeDay = Math.min(day, lastDay);
+  return new Date(start.getFullYear(), start.getMonth(), safeDay);
+}
 
 export default function SalaryHistory() {
   const { toast } = useToast();
@@ -713,37 +736,91 @@ export default function SalaryHistory() {
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Working Hours / Day</Label>
-                <Input
-                  type="number"
-                  value={formData.working_hours}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      working_hours: parseInt(e.target.value) || 8,
-                    })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Effective from day (1–31)</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={31}
-                  placeholder="Whole month if empty"
-                  value={formData.effective_from_day}
-                  onChange={(e) =>
-                    setFormData({ ...formData, effective_from_day: e.target.value })
-                  }
-                />
-                <p className="text-xs text-muted-foreground">
-                  For mid-month increment: from which day this salary applies. Leave empty for full month.
-                </p>
-              </div>
+            <div className="space-y-2">
+              <Label>Working Hours / Day</Label>
+              <Input
+                type="number"
+                value={formData.working_hours}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    working_hours: parseInt(e.target.value) || 8,
+                  })
+                }
+              />
             </div>
+
+            {/* Mid-month increment: dedicated section with date picker */}
+            <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-muted-foreground" />
+                <div>
+                  <p className="font-medium text-sm">Mid-month salary change?</p>
+                  <p className="text-xs text-muted-foreground">
+                    If the new salary started on a specific date (e.g. increment), pick that date below. Otherwise leave as is — same salary all month.
+                  </p>
+                </div>
+              </div>
+              {getMonthStart(formattedMonth) && (
+                <div className="space-y-2">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !formData.effective_from_day && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {formData.effective_from_day
+                          ? format(
+                              getIncrementDate(formattedMonth, formData.effective_from_day)!,
+                              "EEEE, d MMMM yyyy"
+                            )
+                          : "Same salary all month (or pick a date)"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <DayPickerCalendar
+                        mode="single"
+                        defaultMonth={getMonthStart(formattedMonth)!}
+                        month={getMonthStart(formattedMonth)!}
+                        selected={getIncrementDate(formattedMonth, formData.effective_from_day)}
+                        onSelect={(date) =>
+                          setFormData({
+                            ...formData,
+                            effective_from_day: date ? String(date.getDate()) : "",
+                          })
+                        }
+                        disabled={(date) => {
+                          const start = getMonthStart(formattedMonth)!;
+                          return (
+                            date.getMonth() !== start.getMonth() ||
+                            date.getFullYear() !== start.getFullYear()
+                          );
+                        }}
+                        classNames={{ nav: "hidden" }}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  {formData.effective_from_day && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground h-auto py-1 px-0"
+                      onClick={() =>
+                        setFormData({ ...formData, effective_from_day: "" })
+                      }
+                    >
+                      Clear date — same salary all month
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div className="space-y-2">
               <Label>Notes</Label>
               <Textarea
@@ -831,37 +908,97 @@ export default function SalaryHistory() {
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Working Hours / Day</Label>
-                <Input
-                  type="number"
-                  value={formData.working_hours}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      working_hours: parseInt(e.target.value) || 8,
-                    })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Effective from day (1–31)</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={31}
-                  placeholder="Whole month if empty"
-                  value={formData.effective_from_day}
-                  onChange={(e) =>
-                    setFormData({ ...formData, effective_from_day: e.target.value })
-                  }
-                />
-                <p className="text-xs text-muted-foreground">
-                  For mid-month increment: from which day this salary applies.
-                </p>
-              </div>
+            <div className="space-y-2">
+              <Label>Working Hours / Day</Label>
+              <Input
+                type="number"
+                value={formData.working_hours}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    working_hours: parseInt(e.target.value) || 8,
+                  })
+                }
+              />
             </div>
+
+            {/* Mid-month increment: same section as Create */}
+            <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-muted-foreground" />
+                <div>
+                  <p className="font-medium text-sm">Mid-month salary change?</p>
+                  <p className="text-xs text-muted-foreground">
+                    If the new salary started on a specific date, pick that date. Otherwise leave as is.
+                  </p>
+                </div>
+              </div>
+              {formData.effective_month && getMonthStart(formData.effective_month) && (
+                <div className="space-y-2">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !formData.effective_from_day && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {formData.effective_from_day
+                          ? format(
+                              getIncrementDate(
+                                formData.effective_month,
+                                formData.effective_from_day
+                              )!,
+                              "EEEE, d MMMM yyyy"
+                            )
+                          : "Same salary all month (or pick a date)"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <DayPickerCalendar
+                        mode="single"
+                        defaultMonth={getMonthStart(formData.effective_month)!}
+                        month={getMonthStart(formData.effective_month)!}
+                        selected={getIncrementDate(
+                          formData.effective_month,
+                          formData.effective_from_day
+                        )}
+                        onSelect={(date) =>
+                          setFormData({
+                            ...formData,
+                            effective_from_day: date ? String(date.getDate()) : "",
+                          })
+                        }
+                        disabled={(date) => {
+                          const start = getMonthStart(formData.effective_month)!;
+                          return (
+                            date.getMonth() !== start.getMonth() ||
+                            date.getFullYear() !== start.getFullYear()
+                          );
+                        }}
+                        classNames={{ nav: "hidden" }}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  {formData.effective_from_day && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground h-auto py-1 px-0"
+                      onClick={() =>
+                        setFormData({ ...formData, effective_from_day: "" })
+                      }
+                    >
+                      Clear date — same salary all month
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div className="space-y-2">
               <Label>Notes</Label>
               <Textarea
