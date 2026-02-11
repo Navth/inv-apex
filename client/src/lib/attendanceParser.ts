@@ -57,7 +57,7 @@ export async function parseAttendanceFile(file: File): Promise<{ fileName: strin
   const photCol = findHeader(["phot", "ph_ot", "ph-ot", "photot"]);
   const commentsCol = findHeader(["comments", "remark", "remarks", "comment"]);
   const totalWorkingDaysCol = findHeader(["totalworkingdaysonsite", "totalworkingdays", "workingdays", "working_days"]);
-  const roundOffCol = findHeader(["roundoff", "round_off", "round-off"]);
+  const roundOffCol = findHeader(["roundoff", "round_off", "round-off", "roundoffdays", "adjusteddays"]);
   const duesEarnedCol = findHeader(["duesearned", "dues_earned", "dues-earned", "dues"]);
   
   const columnMappings = {

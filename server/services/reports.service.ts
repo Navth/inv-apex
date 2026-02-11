@@ -20,22 +20,32 @@ import {
 
 export interface ReportRow {
   emp_id: string;
+  month_display: string; // e.g. "Jan-25"
+  accommodation: string;
+  project_place: string; // department/project
   name: string;
   designation: string;
-  department: string;
   salary: number;
   worked_days: number;
   working_days: number;
   normal_ot: number;
   friday_ot: number;
   holiday_ot: number;
+  deductions: number;
+  salary_earned: number;
   food_allow: number;
   allowances_earned: number;
   dues_earned: number;
-  deductions: number;
-  gross_salary: number;
+  not_earned: number;
+  fot_earned: number;
+  hot_earned: number;
   total_earnings: number;
   comments: string;
+  visa_cost_recovery: number;
+  doj: string;
+  leave_balance: number | string;
+  category: string;
+  count: number;
   month: string;
 }
 
@@ -86,128 +96,148 @@ function qualifiesForFoodAllowance(employee: Employee): boolean {
 // =============================================================================
 
 /**
- * Generate monthly report combining employee, attendance, and payroll data
+ * Format month for display (e.g. "01-2025" -> "Jan-25")
  */
+function formatMonthDisplay(month: string): string {
+  if (!month || !/^\d{2}-\d{4}$/.test(month)) return month;
+  const [mm, yyyy] = month.split("-");
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const shortYear = yyyy.slice(-2);
+  return `${monthNames[parseInt(mm, 10) - 1]}-${shortYear}`;
+}
+
+/**
+ * Generate monthly report combining employee, attendance, payroll, and food money data
+ * Format matches: emp id | Month | Accommodation | Project/place | Name | DESIGNATION | Salary | Worked Days | etc.
+ */
+/** Aggregate attendances for an employee - use round_off when available (same logic as payroll) */
+function aggregateAttendanceForReport(attendances: Attendance[]): { worked_days: number; working_days: number; normal_ot: number; friday_ot: number; holiday_ot: number; dues_earned: number; comments: string } {
+  if (attendances.length === 0) return { worked_days: 0, working_days: 0, normal_ot: 0, friday_ot: 0, holiday_ot: 0, dues_earned: 0, comments: "" };
+  const roundOffValues = attendances.map(a => a.round_off ? parseFloat(a.round_off.toString()) : 0).filter(v => v > 0);
+  const roundedOff = roundOffValues.length > 0 ? Math.max(...roundOffValues) : 0;
+  const presentSum = attendances.reduce((s, a) => s + (parseInt(a.present_days.toString()) || 0), 0);
+  const worked_days = roundedOff > 0 ? roundedOff : presentSum;
+  const working_days = Math.max(...attendances.map(a => parseInt(a.working_days.toString()) || 0));
+  const normal_ot = attendances.reduce((s, a) => s + parseFloat(a.ot_hours_normal || "0"), 0);
+  const friday_ot = attendances.reduce((s, a) => s + parseFloat(a.ot_hours_friday || "0"), 0);
+  const holiday_ot = attendances.reduce((s, a) => s + parseFloat(a.ot_hours_holiday || "0"), 0);
+  const dues_earned = attendances.reduce((s, a) => s + parseFloat(a.dues_earned || "0"), 0);
+  const comments = attendances.map(a => a.comments).filter(Boolean).join("; ").trim();
+  return { worked_days, working_days, normal_ot, friday_ot, holiday_ot, dues_earned, comments };
+}
+
 export function generateMonthlyReport(
   employees: Employee[],
   attendances: Attendance[],
   payrolls: Payroll[],
-  month: string
+  month: string,
+  foodMoneyMap?: Map<string, number>
 ): ReportRow[] {
-  // Create lookup maps
-  const attendanceMap = new Map<string, Attendance>();
+  const attendanceByEmp = new Map<string, Attendance[]>();
   for (const a of attendances) {
     if (a.month === month) {
-      attendanceMap.set(a.emp_id, a);
+      const list = attendanceByEmp.get(a.emp_id) || [];
+      list.push(a);
+      attendanceByEmp.set(a.emp_id, list);
     }
   }
-  
   const payrollMap = new Map<string, Payroll>();
   for (const p of payrolls) {
-    if (p.month === month) {
-      payrollMap.set(p.emp_id, p);
-    }
+    if (p.month === month) payrollMap.set(p.emp_id, p);
   }
-  
+
   const rows: ReportRow[] = [];
-  
+  const monthDisplay = formatMonthDisplay(month);
+
   for (const employee of employees) {
-    const attendance = attendanceMap.get(employee.emp_id);
+    const empAttendances = attendanceByEmp.get(employee.emp_id) || [];
+    const agg = aggregateAttendanceForReport(empAttendances);
     const payroll = payrollMap.get(employee.emp_id);
-    
-    // Get attendance data
-    const worked_days = payroll ? Number(payroll.days_worked ?? 0) : (attendance?.present_days ?? 0);
-    const working_days = attendance?.working_days ?? 0;
-    const normal_ot = Number(attendance?.ot_hours_normal ?? 0);
+
+    const worked_days = payroll ? Number(payroll.days_worked ?? 0) : agg.worked_days;
+    const normal_ot = agg.normal_ot;
     const friday_ot = Number(attendance?.ot_hours_friday ?? 0);
     const holiday_ot = Number(attendance?.ot_hours_holiday ?? 0);
-    
-    // Base salary calculations
+
     const master_basic_salary = Number(employee.basic_salary ?? 0);
     const workingHoursPerDay = getWorkingHoursPerDay(employee);
     const hourlyBasicSalary = calculateHourlyBasicSalary(master_basic_salary, workingHoursPerDay);
-    
-    // Calculate prorated amounts
+
     const prorated_basic = calculateProratedAmount(master_basic_salary, worked_days);
     const other_allowance = Number(employee.other_allowance ?? 0);
     const prorated_other = calculateProratedAmount(other_allowance, worked_days);
-    
-    // Calculate OT rates
+
     const customRateNormal = Number(employee.ot_rate_normal ?? 0);
     const customRateFriday = Number(employee.ot_rate_friday ?? 0);
     const customRateHoliday = Number(employee.ot_rate_holiday ?? 0);
-    
+
     const rate_normal = customRateNormal > 0 ? customRateNormal : hourlyBasicSalary * OT_MULTIPLIERS.NORMAL;
     const rate_friday = customRateFriday > 0 ? customRateFriday : hourlyBasicSalary * OT_MULTIPLIERS.FRIDAY;
     const rate_holiday = customRateHoliday > 0 ? customRateHoliday : hourlyBasicSalary * OT_MULTIPLIERS.HOLIDAY;
-    
-    // Calculate OT amounts
-    let ot_normal_amount = normal_ot * rate_normal;
-    let ot_friday_amount = friday_ot * rate_friday;
-    let ot_holiday_amount = holiday_ot * rate_holiday;
-    
-    // Apply Rehab indirect reduction
+
+    let not_earned = normal_ot * rate_normal;
+    let fot_earned = friday_ot * rate_friday;
+    let hot_earned = holiday_ot * rate_holiday;
+
     if (isRehabIndirect(employee)) {
-      ot_normal_amount *= REHAB_INDIRECT_OT_PERCENTAGE;
-      ot_friday_amount *= REHAB_INDIRECT_OT_PERCENTAGE;
-      ot_holiday_amount *= REHAB_INDIRECT_OT_PERCENTAGE;
+      not_earned *= REHAB_INDIRECT_OT_PERCENTAGE;
+      fot_earned *= REHAB_INDIRECT_OT_PERCENTAGE;
+      hot_earned *= REHAB_INDIRECT_OT_PERCENTAGE;
     }
-    
-    const ot_amount_calc = ot_normal_amount + ot_friday_amount + ot_holiday_amount;
-    
-    // Food allowance calculation
+
+    const ot_amount_calc = not_earned + fot_earned + hot_earned;
+
     let food_allow_calc = 0;
-    if (qualifiesForFoodAllowance(employee)) {
+    const worksheetFood = foodMoneyMap?.get(employee.emp_id);
+    if (worksheetFood !== undefined && worksheetFood > 0) {
+      food_allow_calc = worksheetFood;
+    } else if (qualifiesForFoodAllowance(employee)) {
       const food_amount = Number(employee.food_allowance_amount ?? 0);
-      if (food_amount > 0) {
-        food_allow_calc = calculateProratedAmount(food_amount, worked_days);
-      }
+      if (food_amount > 0) food_allow_calc = calculateProratedAmount(food_amount, worked_days);
     }
-    
-    // Get dues earned
-    const dues_earned_calc = Number(attendance?.dues_earned ?? 0);
-    
-    // Use persisted payroll values if available, otherwise calculated
-    const food_allow = payroll ? Number(payroll.food_allowance ?? 0) : food_allow_calc;
-    const ot_amount = payroll ? Number(payroll.ot_amount ?? 0) : ot_amount_calc;
-    const dues_earned = payroll ? Number(payroll.dues_earned ?? 0) : dues_earned_calc;
+
+    const dues_earned = payroll ? Number(payroll.dues_earned ?? 0) : agg.dues_earned;
     const deductions = payroll ? Number(payroll.deductions ?? 0) : 0;
-    const gross_salary = payroll ? Number(payroll.gross_salary ?? 0) : (prorated_basic + prorated_other + food_allow + ot_amount);
-    
-    // Net Salary
+    const food_allow = payroll ? Number(payroll.food_allowance ?? 0) : food_allow_calc;
+    const gross_salary = payroll ? Number(payroll.gross_salary ?? 0) : (prorated_basic + prorated_other + food_allow + ot_amount_calc);
     const net_salary_raw = payroll ? Number(payroll.net_salary ?? 0) : (gross_salary + dues_earned - deductions);
-    const net_salary = Math.round(net_salary_raw);
-    
-    // Allowances earned (prorated other allowance, food is separate)
-    const allowances_earned = prorated_other;
-    
+    const total_earnings = Math.round(net_salary_raw);
+
+    const doj = employee.doj ? String(employee.doj) : "";
+
     const row: ReportRow = {
       emp_id: employee.emp_id,
+      month_display: monthDisplay,
+      accommodation: String(employee.accommodation ?? ""),
+      project_place: String(employee.department ?? ""),
       name: employee.name,
       designation: employee.designation,
-      department: employee.department,
       salary: master_basic_salary,
       worked_days,
       working_days,
       normal_ot,
       friday_ot,
       holiday_ot,
-      food_allow,
-      allowances_earned,
-      dues_earned,
       deductions,
-      gross_salary,
-      total_earnings: net_salary,
-      comments: attendance?.comments ?? "",
+      salary_earned: prorated_basic,
+      food_allow,
+      allowances_earned: prorated_other,
+      dues_earned,
+      not_earned,
+      fot_earned,
+      hot_earned,
+      total_earnings,
+      comments: agg.comments,
+      visa_cost_recovery: 0,
+      doj,
+      leave_balance: "",
+      category: String(employee.category ?? "Direct"),
+      count: 1,
       month,
     };
-    
+
     rows.push(row);
   }
-  
-  // Filter out employees with 0 worked days unless they have comments
-  return rows.filter(row => {
-    const hasComments = row.comments && row.comments.trim().length > 0;
-    return row.worked_days > 0 || hasComments;
-  });
+
+  return rows.filter((row) => row.worked_days > 0 || (row.comments && row.comments.trim().length > 0));
 }

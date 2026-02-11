@@ -135,3 +135,16 @@ export const employeeSalaryHistory = pgTable("employee_salary_history", {
 export const insertEmployeeSalaryHistorySchema = createInsertSchema(employeeSalaryHistory).omit({ id: true, created_at: true });
 export type InsertEmployeeSalaryHistory = z.infer<typeof insertEmployeeSalaryHistorySchema>;
 export type EmployeeSalaryHistory = typeof employeeSalaryHistory.$inferSelect;
+
+// Food Money - per-employee per-month amounts from separate worksheet (for employees who receive food money separately)
+export const foodMoney = pgTable("food_money", {
+  id: serial("id").primaryKey(),
+  emp_id: varchar("emp_id", { length: 50 }).notNull(),
+  month: varchar("month", { length: 7 }).notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  uploaded_at: timestamp("uploaded_at").notNull().defaultNow(),
+});
+
+export const insertFoodMoneySchema = createInsertSchema(foodMoney).omit({ id: true, uploaded_at: true });
+export type InsertFoodMoney = z.infer<typeof insertFoodMoneySchema>;
+export type FoodMoney = typeof foodMoney.$inferSelect;

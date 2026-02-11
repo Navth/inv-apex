@@ -15,6 +15,7 @@ import leaveRoutes from "./leave.routes";
 import indemnityRoutes from "./indemnity.routes";
 import reportsRoutes from "./reports.routes";
 import salaryHistoryRoutes from "./salary-history.routes";
+import foodMoneyRoutes from "./food-money.routes";
 
 /**
  * Register all API routes
@@ -31,6 +32,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use("/api/indemnity", indemnityRoutes);
   app.use("/api/reports", reportsRoutes);
   app.use("/api/salary-history", salaryHistoryRoutes);
+  app.use("/api/food-money", foodMoneyRoutes);
 
   const httpServer = createServer(app);
 

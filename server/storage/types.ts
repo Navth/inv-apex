@@ -13,6 +13,8 @@ import type {
   InsertIndemnity,
   EmployeeSalaryHistory,
   InsertEmployeeSalaryHistory,
+  FoodMoney,
+  InsertFoodMoney,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -64,6 +66,13 @@ export interface IStorage {
   createSalaryHistory(history: InsertEmployeeSalaryHistory): Promise<EmployeeSalaryHistory>;
   updateSalaryHistory(id: number, updates: Partial<InsertEmployeeSalaryHistory>): Promise<EmployeeSalaryHistory | undefined>;
   deleteSalaryHistory(id: number): Promise<boolean>;
+
+  // Food Money (worksheet-based food allowance)
+  getFoodMoney(month?: string): Promise<FoodMoney[]>;
+  getFoodMoneyByEmployee(empId: string, month?: string): Promise<FoodMoney[]>;
+  createFoodMoney(data: InsertFoodMoney): Promise<FoodMoney>;
+  bulkCreateFoodMoney(records: InsertFoodMoney[]): Promise<FoodMoney[]>;
+  deleteFoodMoneyForMonth(month: string): Promise<void>;
 }
 
-export type { User, InsertUser, Employee, InsertEmployee, Attendance, InsertAttendance, Payroll, InsertPayroll, Leave, InsertLeave, Indemnity, InsertIndemnity, EmployeeSalaryHistory, InsertEmployeeSalaryHistory };
+export type { User, InsertUser, Employee, InsertEmployee, Attendance, InsertAttendance, Payroll, InsertPayroll, Leave, InsertLeave, Indemnity, InsertIndemnity, EmployeeSalaryHistory, InsertEmployeeSalaryHistory, FoodMoney, InsertFoodMoney };

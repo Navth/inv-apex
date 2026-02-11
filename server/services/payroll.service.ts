@@ -122,11 +122,16 @@ function qualifiesForFoodAllowance(employee: Employee): boolean {
 // =============================================================================
 
 /**
- * Aggregate attendance records for a month into a single summary
+ * Aggregate attendance records for a month into a single summary.
+ * 
+ * Key rules (per client requirements):
+ * - WORKED DAYS (for salary): Use round_off from Excel when available - it is the authoritative adjusted figure.
+ *   When multiple records exist (e.g. different projects), use MAX(round_off) to avoid wrong sums (e.g. 26+26+26=78).
+ * - WORKING DAYS: Total expected days in month - use MAX when multiple records (don't sum).
  */
 export function aggregateAttendance(attendances: Attendance[]): AggregatedAttendance {
-  const workingDays = attendances.reduce((sum, att) => 
-    sum + (parseInt(att.working_days.toString()) || 0), 0);
+  const workingDaysArr = attendances.map(att => parseInt(att.working_days.toString()) || 0);
+  const workingDays = workingDaysArr.length > 0 ? Math.max(...workingDaysArr) : 0;
   
   const presentDays = attendances.reduce((sum, att) => 
     sum + (parseInt(att.present_days.toString()) || 0), 0);
@@ -134,11 +139,12 @@ export function aggregateAttendance(attendances: Attendance[]): AggregatedAttend
   const absentDays = attendances.reduce((sum, att) => 
     sum + (parseInt(att.absent_days.toString()) || 0), 0);
   
-  // Use round_off if available
-  const roundedOffDays = attendances.reduce((sum, att) => {
-    const roundOff = att.round_off ? parseFloat(att.round_off.toString()) : 0;
-    return sum + roundOff;
-  }, 0);
+  // Use round_off when available - it is the authoritative figure for salary calculation.
+  // When multiple records: use MAX(round_off), NOT sum (avoids 26+26+26=78 for multi-project employees)
+  const roundOffValues = attendances
+    .map(att => att.round_off ? parseFloat(att.round_off.toString()) : 0)
+    .filter(v => v > 0);
+  const roundedOffDays = roundOffValues.length > 0 ? Math.max(...roundOffValues) : 0;
   
   const actualPresentDays = roundedOffDays > 0 ? roundedOffDays : presentDays;
   
@@ -248,18 +254,27 @@ export function calculateOT(
 // =============================================================================
 
 /**
- * Calculate food allowance for an employee (prorated with capping)
+ * Calculate food allowance for an employee
+ * Source 1: Master sheet (food_allowance_amount) - prorated when Indirect + Own accommodation
+ * Source 2: Food money worksheet - use amount as-is (already calculated per month)
  */
-export function calculateFoodAllowance(employee: Employee, actualPresentDays: number): number {
+export function calculateFoodAllowance(
+  employee: Employee,
+  actualPresentDays: number,
+  worksheetAmount?: number
+): number {
+  // If worksheet provides amount (employees who get food money separately), use it
+  if (worksheetAmount !== undefined && worksheetAmount > 0) {
+    return worksheetAmount;
+  }
+  // Otherwise use master sheet amount (Indirect + Own accommodation only)
   if (!qualifiesForFoodAllowance(employee)) {
     return 0;
   }
-  
   const foodAllowanceAmount = parseFloat(employee.food_allowance_amount || "0");
   if (foodAllowanceAmount <= 0) {
     return 0;
   }
-  
   return calculateProratedAmount(foodAllowanceAmount, actualPresentDays);
 }
 
@@ -269,11 +284,13 @@ export function calculateFoodAllowance(employee: Employee, actualPresentDays: nu
 
 /**
  * Calculate payroll for a single employee
+ * @param foodMoneyAmount - Optional amount from food money worksheet for this employee
  */
 export function calculateEmployeePayroll(
   employee: Employee,
   attendance: AggregatedAttendance,
-  month: string
+  month: string,
+  foodMoneyAmount?: number
 ): PayrollCalculationResult {
   const monthlyBasicSalary = parseFloat(employee.basic_salary);
   const otherAllowance = parseFloat(employee.other_allowance || "0");
@@ -286,8 +303,8 @@ export function calculateEmployeePayroll(
   // Calculate OT
   const ot = calculateOT(employee, otHoursNormal, otHoursFriday, otHoursHoliday);
   
-  // Calculate food allowance
-  const foodAllowance = calculateFoodAllowance(employee, actualPresentDays);
+  // Calculate food allowance (from master or from worksheet)
+  const foodAllowance = calculateFoodAllowance(employee, actualPresentDays, foodMoneyAmount);
   
   // Calculate totals
   const grossSalary = proratedBasicSalary + proratedOtherAllowance + foodAllowance + ot.pay.total;
@@ -312,48 +329,43 @@ export function calculateEmployeePayroll(
 }
 
 /**
- * Generate payroll for all active employees
+ * Generate payroll for employees who have attendance for the month.
+ * Includes ex-employees (inactive) when they have attendance for past months.
+ * @param foodMoneyMap - Optional map of emp_id -> amount from food money worksheet
  */
 export function generatePayroll(
   employees: Employee[],
   attendances: Attendance[],
-  month: string
+  month: string,
+  foodMoneyMap?: Map<string, number>
 ): PayrollGenerationResult {
   const payrolls: PayrollCalculationResult[] = [];
   const errors: PayrollError[] = [];
   
-  // Create attendance lookup map
+  const employeeMap = new Map(employees.map((e) => [e.emp_id, e]));
+  
+  // Create attendance lookup - iterate over emp_ids with attendance (includes ex-employees)
   const attendanceMap = new Map<string, Attendance[]>();
   for (const att of attendances) {
     if (att.month !== month) continue;
-    
     const existing = attendanceMap.get(att.emp_id) || [];
     existing.push(att);
     attendanceMap.set(att.emp_id, existing);
   }
   
-  for (const employee of employees) {
-    // Skip inactive employees
-    if (employee.status !== "active") {
-      continue;
-    }
-    
-    // Get attendance records for this employee
-    const empAttendances = attendanceMap.get(employee.emp_id);
-    
-    if (!empAttendances || empAttendances.length === 0) {
+  for (const [empId, empAttendances] of attendanceMap) {
+    const employee = employeeMap.get(empId);
+    if (!employee) {
       errors.push({
-        emp_id: employee.emp_id,
-        name: employee.name,
-        error: "No attendance data for selected month",
+        emp_id: empId,
+        name: "Unknown",
+        error: "Employee not found in master (add to master sheet for payroll)",
       });
       continue;
     }
     
-    // Aggregate attendance
     const aggregated = aggregateAttendance(empAttendances);
     
-    // Validate attendance data
     if (aggregated.workingDays === 0) {
       errors.push({
         emp_id: employee.emp_id,
@@ -372,8 +384,8 @@ export function generatePayroll(
       continue;
     }
     
-    // Calculate payroll
-    const payroll = calculateEmployeePayroll(employee, aggregated, month);
+    const foodMoneyAmount = foodMoneyMap?.get(empId);
+    const payroll = calculateEmployeePayroll(employee, aggregated, month, foodMoneyAmount);
     payrolls.push(payroll);
   }
   

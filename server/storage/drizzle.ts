@@ -7,6 +7,7 @@ import {
   leaves as leavesTable,
   indemnity as indemnityTable,
   employeeSalaryHistory,
+  foodMoney as foodMoneyTable,
   type Attendance,
   type Employee,
   type Indemnity,
@@ -21,6 +22,8 @@ import {
   type User,
   type EmployeeSalaryHistory,
   type InsertEmployeeSalaryHistory,
+  type FoodMoney,
+  type InsertFoodMoney,
 } from "@shared/schema";
 import type { IStorage } from "./types";
 
@@ -227,5 +230,34 @@ export class DrizzleStorage implements IStorage {
       .where(eq(employeeSalaryHistory.id, id))
       .returning({ id: employeeSalaryHistory.id });
     return rows.length > 0;
+  }
+
+  // Food Money
+  async getFoodMoney(month?: string): Promise<FoodMoney[]> {
+    if (month) return await this.db.select().from(foodMoneyTable).where(eq(foodMoneyTable.month, month));
+    return await this.db.select().from(foodMoneyTable);
+  }
+
+  async getFoodMoneyByEmployee(empId: string, month?: string): Promise<FoodMoney[]> {
+    if (month)
+      return await this.db
+        .select()
+        .from(foodMoneyTable)
+        .where(and(eq(foodMoneyTable.emp_id, empId), eq(foodMoneyTable.month, month)));
+    return await this.db.select().from(foodMoneyTable).where(eq(foodMoneyTable.emp_id, empId));
+  }
+
+  async createFoodMoney(data: InsertFoodMoney): Promise<FoodMoney> {
+    const rows = await this.db.insert(foodMoneyTable).values(data).returning();
+    return rows[0];
+  }
+
+  async bulkCreateFoodMoney(records: InsertFoodMoney[]): Promise<FoodMoney[]> {
+    if (records.length === 0) return [];
+    return await this.db.insert(foodMoneyTable).values(records).returning();
+  }
+
+  async deleteFoodMoneyForMonth(month: string): Promise<void> {
+    await this.db.delete(foodMoneyTable).where(eq(foodMoneyTable.month, month));
   }
 }

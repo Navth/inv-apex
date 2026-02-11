@@ -184,8 +184,14 @@ router.post("/generate", async (req, res) => {
     }
     
     // Fetch all required data
-    const employees = await storage.getEmployees();
-    const attendances = await storage.getAttendance(month);
+    const [employees, attendances, foodMoneyRecords] = await Promise.all([
+      storage.getEmployees(),
+      storage.getAttendance(month),
+      storage.getFoodMoney(month),
+    ]);
+    const foodMoneyMap = new Map(
+      foodMoneyRecords.map((r) => [r.emp_id, parseFloat(r.amount.toString())])
+    );
     
     // Fetch salary history for the month (if using historical salary)
     let employeesWithSalary = employees;
@@ -216,13 +222,14 @@ router.post("/generate", async (req, res) => {
       }
     }
     
-    // Generate payroll using the service
-    const { payrolls, errors } = generatePayroll(employeesWithSalary, attendances, month);
+    // Generate payroll using the service (includes ex-employees with attendance, uses food money worksheet when available)
+    const { payrolls, errors } = generatePayroll(employeesWithSalary, attendances, month, foodMoneyMap);
     
     // Log debug info for each employee in development only
     if (process.env.NODE_ENV !== 'production') {
+      const empIdsWithAttendance = new Set(attendances.filter(a => a.month === month).map(a => a.emp_id));
       for (const employee of employeesWithSalary) {
-        if (employee.status !== "active") continue;
+        if (!empIdsWithAttendance.has(employee.emp_id)) continue;
         
         const empAttendances = attendances.filter(a => a.emp_id === employee.emp_id && a.month === month);
         if (empAttendances.length === 0) continue;
@@ -238,7 +245,7 @@ router.post("/generate", async (req, res) => {
     if (payrolls.length === 0) {
       return res.status(400).json({ 
         error: "No payroll generated", 
-        message: "No active employees with attendance found",
+        message: "No employees with attendance found for this month",
         warnings: errors,
         created: [] 
       });

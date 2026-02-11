@@ -21,6 +21,7 @@ import {
   Wallet,
   LogOut,
   History,
+  UtensilsCrossed,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
@@ -49,6 +50,11 @@ const menuItems = [
     title: "Salary History",
     url: "/salary-history",
     icon: History,
+  },
+  {
+    title: "Food Money",
+    url: "/food-money",
+    icon: UtensilsCrossed,
   },
   {
     title: "Generate Payroll",

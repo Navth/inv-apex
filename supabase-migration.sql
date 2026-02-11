@@ -91,6 +91,15 @@ CREATE TABLE IF NOT EXISTS indemnity (
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
+-- Create food_money table (worksheet-based food allowance for employees who receive food money separately)
+CREATE TABLE IF NOT EXISTS food_money (
+  id SERIAL PRIMARY KEY,
+  emp_id VARCHAR(50) NOT NULL,
+  month VARCHAR(7) NOT NULL,
+  amount DECIMAL(10, 2) NOT NULL,
+  uploaded_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_attendance_emp_id ON attendance(emp_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_month ON attendance(month);
@@ -99,6 +108,7 @@ CREATE INDEX IF NOT EXISTS idx_payroll_month ON payroll(month);
 CREATE INDEX IF NOT EXISTS idx_leaves_emp_id ON leaves(emp_id);
 CREATE INDEX IF NOT EXISTS idx_leaves_status ON leaves(status);
 CREATE INDEX IF NOT EXISTS idx_indemnity_emp_id ON indemnity(emp_id);
+CREATE INDEX IF NOT EXISTS idx_food_money_emp_month ON food_money(emp_id, month);
 
 -- Display success message
 SELECT 'Database schema created successfully!' AS message;

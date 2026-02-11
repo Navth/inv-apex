@@ -17,6 +17,7 @@ import Reports from "@/pages/Reports";
 import Leaves from "@/pages/Leaves";
 import Indemnity from "@/pages/Indemnity";
 import SalaryHistory from "@/pages/SalaryHistory";
+import FoodMoney from "@/pages/FoodMoney";
 import Login from "@/pages/Login";
 
 function Router() {
@@ -32,6 +33,7 @@ function Router() {
       <Route path="/indemnity" component={Indemnity} />
       <Route path="/reports" component={Reports} />
       <Route path="/salary-history" component={SalaryHistory} />
+      <Route path="/food-money" component={FoodMoney} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -20,13 +20,18 @@ router.get("/", async (req, res) => {
       return res.status(400).json({ error: "month query param (MM-YYYY) is required" });
     }
 
-    const [employees, monthAttendance, monthPayroll] = await Promise.all([
+    const [employees, monthAttendance, monthPayroll, foodMoneyRecords] = await Promise.all([
       storage.getEmployees(),
       storage.getAttendance(month),
       storage.getPayroll(month),
+      storage.getFoodMoney(month),
     ]);
 
-    const rows = generateMonthlyReport(employees, monthAttendance, monthPayroll, month);
+    const foodMoneyMap = new Map(
+      foodMoneyRecords.map((r) => [r.emp_id, parseFloat(r.amount.toString())])
+    );
+
+    const rows = generateMonthlyReport(employees, monthAttendance, monthPayroll, month, foodMoneyMap);
     
     res.json(rows);
   } catch (error) {

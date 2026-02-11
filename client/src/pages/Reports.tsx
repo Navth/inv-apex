@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -30,20 +29,36 @@ export default function Reports() {
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [selectedMonthNum, setSelectedMonthNum] = useState<number>(currentMonth);
   const [format, setFormat] = useState("excel");
-  const [selectedColumns, setSelectedColumns] = useState<string[]>([
-    "emp_id",
-    "name",
-    "designation",
-    "salary",
-    "worked_days",
-    "normal_ot",
-    "friday_ot",
-    "holiday_ot",
-    "allowances_earned",
-    "dues_earned",
-    "total_earnings",
-    "comments",
-  ]);
+  // Fixed column order matching the example format
+  const REPORT_COLUMNS = [
+    { id: "emp_id", label: "emp id" },
+    { id: "month_display", label: "Month" },
+    { id: "accommodation", label: "Accommodation" },
+    { id: "project_place", label: "Project/place of work" },
+    { id: "name", label: "Name" },
+    { id: "designation", label: "DESIGNATION" },
+    { id: "salary", label: "Salary" },
+    { id: "worked_days", label: "Worked Days" },
+    { id: "working_days", label: "Working Days" },
+    { id: "normal_ot", label: "Normal O.T" },
+    { id: "friday_ot", label: "Friday O.T" },
+    { id: "holiday_ot", label: "Public holiday O.T" },
+    { id: "deductions", label: "Deductions" },
+    { id: "salary_earned", label: "Salary Earned" },
+    { id: "food_allow", label: "Food allowance earned" },
+    { id: "allowances_earned", label: "Allowances earned" },
+    { id: "dues_earned", label: "Dues earned" },
+    { id: "not_earned", label: "NOT Earned" },
+    { id: "fot_earned", label: "FOT Earned" },
+    { id: "hot_earned", label: "HOT Earned" },
+    { id: "total_earnings", label: "Total Earnings" },
+    { id: "comments", label: "Comments" },
+    { id: "visa_cost_recovery", label: "Visa cost recovery" },
+    { id: "doj", label: "DATE OF JOINING" },
+    { id: "leave_balance", label: "Leave Balance" },
+    { id: "category", label: "Category" },
+    { id: "count", label: "Count" },
+  ] as const;
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,110 +93,63 @@ export default function Reports() {
     loadReport();
   }, [selectedMonth]);
 
-  const availableColumns = [
-    { id: "emp_id", label: "Employee ID" },
-    { id: "name", label: "Name" },
-    { id: "designation", label: "Designation" },
-    { id: "department", label: "Department" },
-    { id: "salary", label: "Basic Salary" },
-    { id: "worked_days", label: "Worked Days" },
-    { id: "working_days", label: "Working Days" },
-    { id: "normal_ot", label: "Normal OT Hours" },
-    { id: "friday_ot", label: "Friday OT Hours" },
-    { id: "holiday_ot", label: "Holiday OT Hours" },
-    { id: "food_allow", label: "Food Allowance" },
-    { id: "allowances_earned", label: "Allowances Earned" },
-    { id: "dues_earned", label: "Dues Earned" },
-    { id: "deductions", label: "Deductions" },
-    { id: "gross_salary", label: "Gross Salary" },
-    { id: "total_earnings", label: "Net Salary" },
-    { id: "comments", label: "Comments" },
-  ];
-
-  const toggleColumn = (columnId: string) => {
-    setSelectedColumns((prev) =>
-      prev.includes(columnId) ? prev.filter((id) => id !== columnId) : [...prev, columnId]
-    );
-  };
-
   const handleDownloadExcel = () => {
     if (rows.length === 0) {
       alert("No data to export");
       return;
     }
 
-    const columnMap: Record<string, string> = {};
-    availableColumns.forEach((col) => {
-      columnMap[col.id] = col.label;
+    const numericCols = new Set([
+      "salary", "worked_days", "working_days", "normal_ot", "friday_ot", "holiday_ot",
+      "deductions", "salary_earned", "food_allow", "allowances_earned",
+      "dues_earned", "not_earned", "fot_earned", "hot_earned",
+      "total_earnings", "visa_cost_recovery", "count",
+    ]);
+
+    const excelData: (string | number)[][] = [];
+
+    // Title row: "Flow Line - Project Department - Month: January-2025"
+    const monthLabel = formatMonthLabel(selectedMonth).replace(" ", "-");
+    excelData.push([`Flow Line - Project Department - Month: ${monthLabel}`]);
+
+    // Header row
+    excelData.push(REPORT_COLUMNS.map((c) => c.label));
+
+    // Data rows
+    rows.forEach((row) => {
+      excelData.push(
+        REPORT_COLUMNS.map((col) => {
+          let val = row[col.id];
+          if (val === undefined || val === null) val = "";
+          if (numericCols.has(col.id) && typeof val === "number") {
+            return ["salary_earned", "food_allow", "allowances_earned", "dues_earned", "not_earned", "fot_earned", "hot_earned", "total_earnings"].includes(col.id)
+              ? Math.round(val * 100) / 100
+              : Math.round(val);
+          }
+          return val;
+        })
+      );
     });
 
-    const excelData = rows.map((row) => {
-      const filteredRow: Record<string, any> = {};
-      selectedColumns.forEach((colId) => {
-        const label = columnMap[colId] || colId;
-        let value = row[colId];
-
-        if (
-          typeof value === "number" &&
-          ["salary", "food_allow", "allowances_earned", "dues_earned", "deductions", "gross_salary"].includes(colId)
-        ) {
-          value = parseFloat(value.toString()).toFixed(2);
-        } else if (colId === "total_earnings" && typeof value === "number") {
-          // Net salary is already rounded to integer on backend
-          value = Math.round(value);
-        }
-
-        filteredRow[label] = value ?? "";
-      });
-      return filteredRow;
+    // TOTAL row
+    const totalRow: (string | number)[] = [];
+    REPORT_COLUMNS.forEach((col, idx) => {
+      if (idx === 0) {
+        totalRow.push("TOTAL");
+      } else if (numericCols.has(col.id)) {
+        const total = rows.reduce((sum, r) => sum + (Number((r as any)[col.id]) || 0), 0);
+        totalRow.push(Math.round(total));
+      } else {
+        totalRow.push("");
+      }
     });
+    excelData.push(totalRow);
 
-const totalRow: Record<string, any> = {};
-const firstSelectedLabel = columnMap[selectedColumns[0]] || selectedColumns[0];
-totalRow[firstSelectedLabel] = "TOTAL";
-
-const numericCols = [
-  "salary",
-  "worked_days",
-  "working_days",
-  "normal_ot",
-  "friday_ot",
-  "holiday_ot",
-  "food_allow",
-  "allowances_earned",
-  "dues_earned",
-  "deductions",
-  "gross_salary",
-  "total_earnings",
-];
-
-selectedColumns.forEach((colId) => {
-  const label = columnMap[colId] || colId;
-  if (numericCols.includes(colId)) {
-    const total = rows.reduce(
-      (sum, row) => sum + (Number(row[colId]) || 0),
-      0
-    );
-    totalRow[label] = Math.round(total);
-  } else if (label !== firstSelectedLabel) {
-    totalRow[label] = "";
-  }
-});
-
-excelData.push(totalRow);
-
-
-
-    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    const worksheet = XLSX.utils.aoa_to_sheet(excelData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Report");
 
-    const maxWidths: number[] = [];
-    selectedColumns.forEach((colId, idx) => {
-      const label = columnMap[colId] || colId;
-      maxWidths[idx] = Math.max(label.length, 15);
-    });
-    worksheet["!cols"] = maxWidths.map((w) => ({ wch: w }));
+    worksheet["!cols"] = REPORT_COLUMNS.map((_, i) => ({ wch: i === 0 ? 12 : 14 }));
 
     const filename = `Salary_Report_${selectedMonth}.xlsx`;
     XLSX.writeFile(workbook, filename);
@@ -193,23 +161,16 @@ excelData.push(totalRow);
       return;
     }
 
-    const columnMap: Record<string, string> = {};
-    availableColumns.forEach((col) => {
-      columnMap[col.id] = col.label;
-    });
-
-    const header = selectedColumns.map((colId) => columnMap[colId] || colId).join(",");
+    const header = REPORT_COLUMNS.map((c) => c.label).join(",");
 
     const csvLines = rows.map((row) =>
-      selectedColumns
-        .map((colId) => {
-          let value = row[colId] ?? "";
-          if (typeof value === "string" && (value.includes(",") || value.includes('"'))) {
-            value = `"${value.replace(/"/g, '""')}"`;
-          }
-          return value;
-        })
-        .join(",")
+      REPORT_COLUMNS.map((col) => {
+        let value = (row as any)[col.id] ?? "";
+        if (typeof value === "string" && (value.includes(",") || value.includes('"'))) {
+          value = `"${value.replace(/"/g, '""')}"`;
+        }
+        return value;
+      }).join(",")
     );
 
     const csvContent = [header, ...csvLines].join("\n");
@@ -240,7 +201,15 @@ excelData.push(totalRow);
       <Card>
         <CardHeader>
           <CardTitle>Monthly Salary Sheet</CardTitle>
-          <CardDescription>Aggregated payroll and attendance for selected month</CardDescription>
+          <CardDescription>
+            Aggregated payroll and attendance for selected month. Salary is calculated using{" "}
+            <strong>round off</strong> from the attendance Excel when available (authoritative figure).
+            <br />
+            <span className="text-muted-foreground text-sm mt-1 block">
+              <strong>Worked Days</strong> = Days used for salary (from round off or present days).{" "}
+              <strong>Working Days</strong> = Total expected days in the month (e.g. 26 or 27).
+            </span>
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -306,29 +275,10 @@ excelData.push(totalRow);
               </Select>
             </div>
 
-          <div className="space-y-3">
-            <Label className="text-sm font-medium">Select Columns to Export</Label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border rounded-lg p-4">
-              {availableColumns.map((column) => (
-                <div key={column.id} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={column.id}
-                    checked={selectedColumns.includes(column.id)}
-                    onCheckedChange={() => toggleColumn(column.id)}
-                    data-testid={`checkbox-${column.id}`}
-                  />
-                  <Label htmlFor={column.id} className="text-sm font-normal cursor-pointer">
-                    {column.label}
-                  </Label>
-                </div>
-              ))}
-            </div>
-          </div>
-
           <div className="flex gap-2">
             <Button
               onClick={handleDownload}
-              disabled={selectedColumns.length === 0 || rows.length === 0 || loading}
+              disabled={rows.length === 0 || loading}
               data-testid="button-download-report"
               className="flex-1"
             >

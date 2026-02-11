@@ -35,7 +35,10 @@ export default function Attendance() {
       const to2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : "0.00");
       const payload = records.map((r) => {
         const working_days = r.total_working_days ?? (Array.isArray(r.dailyStatus) ? r.dailyStatus.length : 30);
-        const present_days = Number(r.worked_days ?? 0);
+        // Use round_off when available - it is the authoritative figure for salary calculation
+        const present_days = (r.round_off !== undefined && r.round_off > 0)
+          ? Math.round(Number(r.round_off))
+          : Number(r.worked_days ?? 0);
         const absent_days = Math.max(Number(working_days) - present_days, 0);
 
         return {
