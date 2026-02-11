@@ -26,6 +26,26 @@ router.get("/", async (req, res) => {
 });
 
 /**
+ * DELETE /api/attendance?month=MM-YYYY
+ * Delete all uploaded attendance for a month. Optionally ?dept_id=N deletes only that department's slice.
+ * Use this to remove an uploaded attendance sheet and re-upload or correct data.
+ */
+router.delete("/", async (req, res) => {
+  try {
+    const month = req.query.month as string | undefined;
+    const deptId = req.query.dept_id != null ? parseInt(String(req.query.dept_id), 10) : undefined;
+    if (!month || !/^\d{2}-\d{4}$/.test(month)) {
+      return res.status(400).json({ error: "Query param month (MM-YYYY) is required and must match MM-YYYY" });
+    }
+    const deletedCount = await storage.deleteAttendanceByMonth(month, isNaN(deptId!) ? undefined : deptId);
+    res.json({ success: true, deleted: deletedCount, message: `Deleted ${deletedCount} attendance record(s) for ${month}${deptId != null ? ` (department ${deptId})` : ""}` });
+  } catch (error) {
+    console.error("Delete attendance by month error:", error);
+    res.status(500).json({ error: "Failed to delete attendance" });
+  }
+});
+
+/**
  * GET /api/attendance/:empId
  * Get attendance for a specific employee
  */

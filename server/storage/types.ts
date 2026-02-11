@@ -15,6 +15,8 @@ import type {
   InsertIndemnity,
   EmployeeSalaryHistory,
   InsertEmployeeSalaryHistory,
+  EmployeeFoodAllowanceMonthly,
+  InsertEmployeeFoodAllowanceMonthly,
 } from "@shared/schema";
 
 /** Employee with department name joined (for payroll/reports that need dept name) */
@@ -50,6 +52,8 @@ export interface IStorage {
   deleteAttendanceByMonthAndEmpIds(month: string, empIds: string[]): Promise<void>;
   /** Delete attendance for a month that is tagged with this dept (for replace-by-dept uploads; keeps other depts' rows). */
   deleteAttendanceByMonthAndDept(month: string, deptId: number): Promise<void>;
+  /** Delete all attendance records for a month (optionally only for a department). */
+  deleteAttendanceByMonth(month: string, deptId?: number): Promise<number>;
   updateAttendance(id: number, attendance: Partial<InsertAttendance>): Promise<Attendance | undefined>;
   deleteAttendance(id: number): Promise<boolean>;
 
@@ -85,6 +89,11 @@ export interface IStorage {
   createSalaryHistory(history: InsertEmployeeSalaryHistory): Promise<EmployeeSalaryHistory>;
   updateSalaryHistory(id: number, updates: Partial<InsertEmployeeSalaryHistory>): Promise<EmployeeSalaryHistory | undefined>;
   deleteSalaryHistory(id: number): Promise<boolean>;
+
+  // Employee Food Allowance (separate worksheet / monthly override)
+  getFoodAllowanceForMonth(month: string): Promise<{ emp_id: string; amount: string }[]>;
+  setFoodAllowanceForMonth(empId: string, month: string, amount: number): Promise<EmployeeFoodAllowanceMonthly>;
+  bulkSetFoodAllowance(entries: { emp_id: string; month: string; amount: number }[]): Promise<void>;
 }
 
-export type { User, InsertUser, Dept, InsertDept, Employee, InsertEmployee, Attendance, InsertAttendance, Payroll, InsertPayroll, Leave, InsertLeave, Indemnity, InsertIndemnity, EmployeeSalaryHistory, InsertEmployeeSalaryHistory };
+export type { User, InsertUser, Dept, InsertDept, Employee, InsertEmployee, Attendance, InsertAttendance, Payroll, InsertPayroll, Leave, InsertLeave, Indemnity, InsertIndemnity, EmployeeSalaryHistory, InsertEmployeeSalaryHistory, EmployeeFoodAllowanceMonthly, InsertEmployeeFoodAllowanceMonthly };

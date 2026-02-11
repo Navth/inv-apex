@@ -8,6 +8,7 @@ import {
   leaves as leavesTable,
   indemnity as indemnityTable,
   employeeSalaryHistory,
+  employeeFoodAllowanceMonthly as foodAllowanceMonthlyTable,
   type Attendance,
   type Employee,
   type Dept,
@@ -24,6 +25,7 @@ import {
   type User,
   type EmployeeSalaryHistory,
   type InsertEmployeeSalaryHistory,
+  type EmployeeFoodAllowanceMonthly,
 } from "@shared/schema";
 import type { IStorage, EmployeeWithDeptName } from "./types";
 
@@ -135,6 +137,22 @@ export class DrizzleStorage implements IStorage {
     await this.db
       .delete(attendanceTable)
       .where(and(eq(attendanceTable.month, month), eq(attendanceTable.dept_id, deptId)));
+  }
+
+  /** Delete all attendance for a month; if deptId provided, only rows with that dept_id (or null). Returns deleted count. */
+  async deleteAttendanceByMonth(month: string, deptId?: number): Promise<number> {
+    if (deptId != null) {
+      const deleted = await this.db
+        .delete(attendanceTable)
+        .where(and(eq(attendanceTable.month, month), eq(attendanceTable.dept_id, deptId)))
+        .returning({ id: attendanceTable.id });
+      return deleted.length;
+    }
+    const deleted = await this.db
+      .delete(attendanceTable)
+      .where(eq(attendanceTable.month, month))
+      .returning({ id: attendanceTable.id });
+    return deleted.length;
   }
 
   async getAttendanceByEmployee(empId: string, month?: string): Promise<Attendance[]> {
@@ -336,5 +354,43 @@ export class DrizzleStorage implements IStorage {
       .where(eq(employeeSalaryHistory.id, id))
       .returning({ id: employeeSalaryHistory.id });
     return rows.length > 0;
+  }
+
+  // Employee Food Allowance (separate worksheet)
+  async getFoodAllowanceForMonth(month: string): Promise<{ emp_id: string; amount: string }[]> {
+    const rows = await this.db
+      .select({ emp_id: foodAllowanceMonthlyTable.emp_id, amount: foodAllowanceMonthlyTable.amount })
+      .from(foodAllowanceMonthlyTable)
+      .where(eq(foodAllowanceMonthlyTable.month, month));
+    return rows.map((r) => ({ emp_id: r.emp_id, amount: String(r.amount ?? "0") }));
+  }
+
+  async setFoodAllowanceForMonth(empId: string, month: string, amount: number): Promise<EmployeeFoodAllowanceMonthly> {
+    const existing = await this.db
+      .select()
+      .from(foodAllowanceMonthlyTable)
+      .where(
+        and(eq(foodAllowanceMonthlyTable.emp_id, empId), eq(foodAllowanceMonthlyTable.month, month))
+      )
+      .limit(1);
+    if (existing.length > 0) {
+      const rows = await this.db
+        .update(foodAllowanceMonthlyTable)
+        .set({ amount: amount.toFixed(2) })
+        .where(eq(foodAllowanceMonthlyTable.id, existing[0].id))
+        .returning();
+      return rows[0];
+    }
+    const rows = await this.db
+      .insert(foodAllowanceMonthlyTable)
+      .values({ emp_id: empId, month, amount: amount.toFixed(2) })
+      .returning();
+    return rows[0];
+  }
+
+  async bulkSetFoodAllowance(entries: { emp_id: string; month: string; amount: number }[]): Promise<void> {
+    for (const e of entries) {
+      await this.setFoodAllowanceForMonth(e.emp_id, e.month, e.amount);
+    }
   }
 }

@@ -73,6 +73,21 @@ export async function deleteAttendance(id: number): Promise<{ success: boolean; 
   return api.delete<{ success: boolean; message: string }>(`/api/attendance/${id}`);
 }
 
+/**
+ * Delete all uploaded attendance for a month (removes the "attendance sheet" for that month).
+ * Optionally pass dept_id to delete only that department's slice.
+ */
+export async function deleteAttendanceByMonth(
+  month: string,
+  deptId?: number
+): Promise<{ success: boolean; deleted: number; message: string }> {
+  const params = new URLSearchParams({ month });
+  if (deptId != null) params.set("dept_id", String(deptId));
+  return api.delete<{ success: boolean; deleted: number; message: string }>(
+    `/api/attendance?${params.toString()}`
+  );
+}
+
 export const attendanceApi = {
   getAll: getAttendance,
   getByEmployee: getEmployeeAttendance,
@@ -80,6 +95,7 @@ export const attendanceApi = {
   bulkCreate: bulkCreateAttendance,
   update: updateAttendance,
   delete: deleteAttendance,
+  deleteByMonth: deleteAttendanceByMonth,
 };
 
 export default attendanceApi;

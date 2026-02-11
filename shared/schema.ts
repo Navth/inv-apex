@@ -159,3 +159,14 @@ export const employeeSalaryHistory = pgTable("employee_salary_history", {
 export const insertEmployeeSalaryHistorySchema = createInsertSchema(employeeSalaryHistory).omit({ id: true, created_at: true });
 export type InsertEmployeeSalaryHistory = z.infer<typeof insertEmployeeSalaryHistorySchema>;
 export type EmployeeSalaryHistory = typeof employeeSalaryHistory.$inferSelect;
+
+/** Food money given separately from master: monthly amount per employee (from separate worksheet). When set, overrides employee.food_allowance_amount for that month. */
+export const employeeFoodAllowanceMonthly = pgTable("employee_food_allowance_monthly", {
+  id: serial("id").primaryKey(),
+  emp_id: varchar("emp_id", { length: 50 }).notNull(),
+  month: varchar("month", { length: 7 }).notNull(), // MM-YYYY
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+});
+export const insertEmployeeFoodAllowanceMonthlySchema = createInsertSchema(employeeFoodAllowanceMonthly).omit({ id: true });
+export type InsertEmployeeFoodAllowanceMonthly = z.infer<typeof insertEmployeeFoodAllowanceMonthlySchema>;
+export type EmployeeFoodAllowanceMonthly = typeof employeeFoodAllowanceMonthly.$inferSelect;

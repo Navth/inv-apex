@@ -30,19 +30,11 @@ export default function Reports() {
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [selectedMonthNum, setSelectedMonthNum] = useState<number>(currentMonth);
   const [format, setFormat] = useState("excel");
-  const [selectedColumns, setSelectedColumns] = useState<string[]>([
-    "emp_id",
-    "name",
-    "designation",
-    "salary",
-    "worked_days",
-    "normal_ot",
-    "friday_ot",
-    "holiday_ot",
-    "allowances_earned",
-    "dues_earned",
-    "total_earnings",
-    "comments",
+  const [selectedColumns, setSelectedColumns] = useState<string[]>(() => [
+    "emp_id", "month", "accommodation", "project_place_of_work", "name", "designation", "salary",
+    "worked_days", "normal_ot", "friday_ot", "holiday_ot", "deductions", "salary_earned", "food_allow",
+    "allowances_earned", "dues_earned", "not_earned", "fot_earned", "hot_earned", "gross_salary",
+    "comments", "visa_cost_recovery", "doj", "leave_balance", "category", "count",
   ]);
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -79,23 +71,41 @@ export default function Reports() {
   }, [selectedMonth]);
 
   const availableColumns = [
-    { id: "emp_id", label: "Employee ID" },
+    { id: "emp_id", label: "emp id" },
+    { id: "month", label: "Month" },
+    { id: "accommodation", label: "Accommodation" },
+    { id: "project_place_of_work", label: "Project/place of work" },
     { id: "name", label: "Name" },
-    { id: "designation", label: "Designation" },
-    { id: "department", label: "Department" },
-    { id: "salary", label: "Basic Salary" },
+    { id: "designation", label: "DESIGNATION" },
+    { id: "salary", label: "Salary" },
     { id: "worked_days", label: "Worked Days" },
-    { id: "working_days", label: "Working Days" },
-    { id: "normal_ot", label: "Normal OT Hours" },
-    { id: "friday_ot", label: "Friday OT Hours" },
-    { id: "holiday_ot", label: "Holiday OT Hours" },
-    { id: "food_allow", label: "Food Allowance" },
-    { id: "allowances_earned", label: "Allowances Earned" },
-    { id: "dues_earned", label: "Dues Earned" },
+    { id: "normal_ot", label: "Normal O.T" },
+    { id: "friday_ot", label: "Friday O.T" },
+    { id: "holiday_ot", label: "Public holiday O.T" },
     { id: "deductions", label: "Deductions" },
-    { id: "gross_salary", label: "Gross Salary" },
-    { id: "total_earnings", label: "Net Salary" },
+    { id: "salary_earned", label: "Salary Earned" },
+    { id: "food_allow", label: "Food allowance earned" },
+    { id: "allowances_earned", label: "Allowances earned" },
+    { id: "dues_earned", label: "Dues earned" },
+    { id: "not_earned", label: "NOT Earned" },
+    { id: "fot_earned", label: "FOT Earned" },
+    { id: "hot_earned", label: "HOT Earned" },
+    { id: "gross_salary", label: "Total Earnings" },
     { id: "comments", label: "Comments" },
+    { id: "visa_cost_recovery", label: "Visa cost recovery" },
+    { id: "doj", label: "DATE OF JOINING" },
+    { id: "leave_balance", label: "Leave Balance" },
+    { id: "category", label: "Category" },
+    { id: "count", label: "Count" },
+    { id: "department", label: "Department" },
+    { id: "working_days", label: "Working Days" },
+    { id: "total_earnings", label: "Net Salary" },
+  ];
+  const detailedFormatColumnIds = [
+    "emp_id", "month", "accommodation", "project_place_of_work", "name", "designation", "salary",
+    "worked_days", "normal_ot", "friday_ot", "holiday_ot", "deductions", "salary_earned", "food_allow",
+    "allowances_earned", "dues_earned", "not_earned", "fot_earned", "hot_earned", "gross_salary",
+    "comments", "visa_cost_recovery", "doj", "leave_balance", "category", "count",
   ];
 
   const toggleColumn = (columnId: string) => {
@@ -120,14 +130,17 @@ export default function Reports() {
       selectedColumns.forEach((colId) => {
         const label = columnMap[colId] || colId;
         let value = row[colId];
-
+        if (colId === "month" && typeof value === "string" && /^\d{2}-\d{4}$/.test(value)) {
+          const [mm, yyyy] = value.split("-");
+          const monthNamesShort = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+          value = `${monthNamesShort[parseInt(mm!, 10) - 1]}-${yyyy!.slice(2)}`;
+        }
         if (
           typeof value === "number" &&
-          ["salary", "food_allow", "allowances_earned", "dues_earned", "deductions", "gross_salary"].includes(colId)
+          ["salary", "food_allow", "allowances_earned", "dues_earned", "deductions", "gross_salary", "salary_earned", "not_earned", "fot_earned", "hot_earned"].includes(colId)
         ) {
           value = parseFloat(value.toString()).toFixed(2);
         } else if (colId === "total_earnings" && typeof value === "number") {
-          // Net salary is already rounded to integer on backend
           value = Math.round(value);
         }
 
@@ -153,6 +166,10 @@ const numericCols = [
   "deductions",
   "gross_salary",
   "total_earnings",
+  "salary_earned",
+  "not_earned",
+  "fot_earned",
+  "hot_earned",
 ];
 
 selectedColumns.forEach((colId) => {
@@ -241,7 +258,9 @@ excelData.push(totalRow);
       <Card>
         <CardHeader>
           <CardTitle>Monthly Salary Sheet</CardTitle>
-          <CardDescription>Aggregated payroll and attendance for selected month</CardDescription>
+          <CardDescription>
+            Aggregated payroll and attendance for selected month. &quot;Worked Days&quot; is the value used for salary (round-off from Excel when present, else present days). &quot;Working Days&quot; is the period total from the sheet.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

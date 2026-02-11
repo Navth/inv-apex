@@ -274,11 +274,20 @@ router.post("/generate", async (req, res) => {
       }
     }
 
+    // Food money from separate worksheet (overrides master sheet when set)
+    const foodAllowanceRows = await storage.getFoodAllowanceForMonth(month);
+    const foodAllowanceOverrides = new Map<string, number>();
+    for (const row of foodAllowanceRows) {
+      const amt = parseFloat(row.amount || "0");
+      if (amt > 0) foodAllowanceOverrides.set(row.emp_id, amt);
+    }
+
     const { payrolls, errors } = generatePayroll(
       employeesWithSalary,
       attendances,
       month,
-      salarySegmentsMap.size > 0 ? salarySegmentsMap : undefined
+      salarySegmentsMap.size > 0 ? salarySegmentsMap : undefined,
+      foodAllowanceOverrides.size > 0 ? foodAllowanceOverrides : undefined
     );
     
     if (process.env.NODE_ENV !== 'production') {

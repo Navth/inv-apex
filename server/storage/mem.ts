@@ -151,6 +151,17 @@ export class MemStorage implements IStorage {
     }
   }
 
+  async deleteAttendanceByMonth(month: string, deptId?: number): Promise<number> {
+    let count = 0;
+    for (const [id, a] of this.attendance.entries()) {
+      if (a.month === month && (deptId == null || a.dept_id === deptId)) {
+        this.attendance.delete(id);
+        count++;
+      }
+    }
+    return count;
+  }
+
   async getPayroll(month?: string, deptId?: number): Promise<Payroll[]> {
     let all = Array.from(this.payrolls.values());
     if (month) all = all.filter((p) => p.month === month);
@@ -357,5 +368,21 @@ export class MemStorage implements IStorage {
 
   async deleteSalaryHistory(id: number): Promise<boolean> {
     return this.salaryHistory.delete(id);
+  }
+
+  async getFoodAllowanceForMonth(_month: string): Promise<{ emp_id: string; amount: string }[]> {
+    return [];
+  }
+
+  async setFoodAllowanceForMonth(
+    _empId: string,
+    _month: string,
+    _amount: number
+  ): Promise<import("@shared/schema").EmployeeFoodAllowanceMonthly> {
+    throw new Error("MemStorage: setFoodAllowanceForMonth not implemented");
+  }
+
+  async bulkSetFoodAllowance(_entries: { emp_id: string; month: string; amount: number }[]): Promise<void> {
+    // no-op for mem
   }
 }

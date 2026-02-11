@@ -24,7 +24,9 @@ export interface ReportRow {
   designation: string;
   department: string;
   salary: number;
+  /** Days used for salary proration (round-off from sheet when present, else present days) */
   worked_days: number;
+  /** Total working days in the period (from sheet); may differ from worked_days when round-off is used */
   working_days: number;
   normal_ot: number;
   friday_ot: number;
@@ -37,6 +39,18 @@ export interface ReportRow {
   total_earnings: number;
   comments: string;
   month: string;
+  /** Salary earned (prorated basic) for detailed report */
+  salary_earned?: number;
+  not_earned?: number;
+  fot_earned?: number;
+  hot_earned?: number;
+  accommodation?: string;
+  project_place_of_work?: string;
+  doj?: string;
+  category?: string;
+  leave_balance?: number | string;
+  visa_cost_recovery?: number | string;
+  count?: number;
 }
 
 // =============================================================================
@@ -88,19 +102,29 @@ function qualifiesForFoodAllowance(employee: Employee): boolean {
 // REPORT GENERATION
 // =============================================================================
 
-/** Aggregate multiple attendance rows (e.g. from different depts) into one set of totals */
+/** Aggregate multiple attendance rows (e.g. from different depts) into one set of totals.
+ * worked_days_for_salary: when round_off is present in any row we use sum(round_off), else sum(present_days). This is the value used for salary proration.
+ */
 function aggregateAttendanceForReport(records: Attendance[]): {
   working_days: number;
   present_days: number;
+  rounded_off_days: number;
+  worked_days_for_salary: number;
   ot_hours_normal: number;
   ot_hours_friday: number;
   ot_hours_holiday: number;
   dues_earned: number;
   comments: string;
 } {
+  const working_days = records.reduce((s, a) => s + (Number(a.working_days) || 0), 0);
+  const present_days = records.reduce((s, a) => s + (Number(a.present_days) || 0), 0);
+  const rounded_off_days = records.reduce((s, a) => s + (a.round_off ? parseFloat(String(a.round_off)) : 0), 0);
+  const worked_days_for_salary = rounded_off_days > 0 ? rounded_off_days : present_days;
   return {
-    working_days: records.reduce((s, a) => s + (Number(a.working_days) || 0), 0),
-    present_days: records.reduce((s, a) => s + (Number(a.present_days) || 0), 0),
+    working_days,
+    present_days,
+    rounded_off_days,
+    worked_days_for_salary,
     ot_hours_normal: records.reduce((s, a) => s + parseFloat(String(a.ot_hours_normal || "0")), 0),
     ot_hours_friday: records.reduce((s, a) => s + parseFloat(String(a.ot_hours_friday || "0")), 0),
     ot_hours_holiday: records.reduce((s, a) => s + parseFloat(String(a.ot_hours_holiday || "0")), 0),
@@ -143,8 +167,10 @@ export function generateMonthlyReport(
     const aggregated = empAttendances.length > 0 ? aggregateAttendanceForReport(empAttendances) : null;
     const payroll = payrollMap.get(employee.emp_id);
     
-    // Get attendance data (aggregated when multiple rows)
-    const worked_days = payroll ? Number(payroll.days_worked ?? 0) : (aggregated?.present_days ?? 0);
+    // Get attendance data (aggregated when multiple rows).
+    // Worked days for salary: use round-off when present in sheet, else present_days. Payroll.days_worked is the rounded value used.
+    const worked_days_for_salary = aggregated?.worked_days_for_salary ?? aggregated?.present_days ?? 0;
+    const worked_days = payroll ? Number(payroll.days_worked ?? 0) : Math.round(worked_days_for_salary);
     const working_days = aggregated?.working_days ?? 0;
     const normal_ot = aggregated?.ot_hours_normal ?? 0;
     const friday_ot = aggregated?.ot_hours_friday ?? 0;
@@ -228,6 +254,17 @@ export function generateMonthlyReport(
       total_earnings: net_salary,
       comments: aggregated?.comments ?? "",
       month,
+      salary_earned: prorated_basic,
+      not_earned: ot_normal_amount,
+      fot_earned: ot_friday_amount,
+      hot_earned: ot_holiday_amount,
+      accommodation: employee.accommodation ?? "",
+      project_place_of_work: (employee as EmployeeWithDeptName).department_name ?? (employee as any).department ?? "",
+      doj: employee.doj ? String(employee.doj) : "",
+      category: employee.category ?? "Direct",
+      leave_balance: "",
+      visa_cost_recovery: "",
+      count: 1,
     };
     
     rows.push(row);

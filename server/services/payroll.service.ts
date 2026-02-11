@@ -265,18 +265,25 @@ export function calculateOT(
 // =============================================================================
 
 /**
- * Calculate food allowance for an employee (prorated with capping)
+ * Calculate food allowance for an employee (prorated with capping).
+ * When monthlyOverride is provided (from separate food money worksheet), that amount is used for the month (prorated by days).
+ * Otherwise uses employee.food_allowance_amount and eligibility (Indirect + Own accommodation).
  */
-export function calculateFoodAllowance(employee: Employee, actualPresentDays: number): number {
+export function calculateFoodAllowance(
+  employee: Employee,
+  actualPresentDays: number,
+  monthlyOverride?: number
+): number {
+  if (monthlyOverride !== undefined && monthlyOverride > 0) {
+    return calculateProratedAmount(monthlyOverride, actualPresentDays);
+  }
   if (!qualifiesForFoodAllowance(employee)) {
     return 0;
   }
-  
   const foodAllowanceAmount = parseFloat(employee.food_allowance_amount || "0");
   if (foodAllowanceAmount <= 0) {
     return 0;
   }
-  
   return calculateProratedAmount(foodAllowanceAmount, actualPresentDays);
 }
 
@@ -341,7 +348,8 @@ export function calculateEmployeePayrollWithSegments(
   baseEmployee: Employee,
   segments: EmployeeSalaryHistory[],
   attendance: AggregatedAttendance,
-  month: string
+  month: string,
+  foodAllowanceOverride?: number
 ): PayrollCalculationResult {
   const { daysInMonth } = parseMonthAndDays(month);
   const fractions = getSegmentDayFractions(segments, daysInMonth);
@@ -371,7 +379,7 @@ export function calculateEmployeePayrollWithSegments(
       parseFloat(segments[i].other_allowance || "0"),
       workedForSegment
     );
-    totalFoodAllowance += calculateFoodAllowance(segmentEmployee, workedForSegment);
+    totalFoodAllowance += calculateFoodAllowance(segmentEmployee, workedForSegment, foodAllowanceOverride);
     const otNorm = otHoursNormal * fraction;
     const otFri = otHoursFriday * fraction;
     const otHol = otHoursHoliday * fraction;
@@ -407,7 +415,8 @@ export function calculateEmployeePayrollWithSegments(
 export function calculateEmployeePayroll(
   employee: Employee,
   attendance: AggregatedAttendance,
-  month: string
+  month: string,
+  foodAllowanceOverride?: number
 ): PayrollCalculationResult {
   const monthlyBasicSalary = parseFloat(employee.basic_salary);
   const otherAllowance = parseFloat(employee.other_allowance || "0");
@@ -422,8 +431,8 @@ export function calculateEmployeePayroll(
   // Calculate OT
   const ot = calculateOT(employee, otHoursNormal, otHoursFriday, otHoursHoliday);
   
-  // Calculate food allowance (same rounded/capped days)
-  const foodAllowance = calculateFoodAllowance(employee, actualPresentDays);
+  // Calculate food allowance (same rounded/capped days; override from separate worksheet when provided)
+  const foodAllowance = calculateFoodAllowance(employee, actualPresentDays, foodAllowanceOverride);
   
   // Calculate totals
   const grossSalary = proratedBasicSalary + proratedOtherAllowance + foodAllowance + ot.pay.total;
@@ -450,16 +459,19 @@ export function calculateEmployeePayroll(
 /**
  * Generate payroll for all active employees.
  * When salarySegmentsMap has 2+ segments for an employee, uses mid-month increment calculation.
+ * foodAllowanceOverrides: optional map of emp_id -> monthly amount (from separate food money worksheet).
  */
 export function generatePayroll(
   employees: Employee[],
   attendances: Attendance[],
   month: string,
-  salarySegmentsMap?: Map<string, EmployeeSalaryHistory[]>
+  salarySegmentsMap?: Map<string, EmployeeSalaryHistory[]>,
+  foodAllowanceOverrides?: Map<string, number>
 ): PayrollGenerationResult {
   const payrolls: PayrollCalculationResult[] = [];
   const errors: PayrollError[] = [];
   const segmentsMap = salarySegmentsMap ?? new Map();
+  const foodOverrides = foodAllowanceOverrides ?? new Map();
 
   // Create attendance lookup map
   const attendanceMap = new Map<string, Attendance[]>();
@@ -478,9 +490,9 @@ export function generatePayroll(
     }
 
     // Get attendance records for this employee
-    const empAttendances = attendanceMap.get(employee.emp_id);
+    const empAttendancesRaw = attendanceMap.get(employee.emp_id);
 
-    if (!empAttendances || empAttendances.length === 0) {
+    if (!empAttendancesRaw || empAttendancesRaw.length === 0) {
       errors.push({
         emp_id: employee.emp_id,
         name: employee.name,
@@ -489,7 +501,26 @@ export function generatePayroll(
       continue;
     }
 
-    // Aggregate attendance
+    // When attendance has dept_id (department-specific sheets), use only rows for this employee's department.
+    // This ensures e.g. "worked 3 days in EWC" uses only EWC row for salary, not sum across all depts.
+    const hasAnyDeptId = empAttendancesRaw.some((a) => a.dept_id != null);
+    const empAttendances =
+      hasAnyDeptId
+        ? empAttendancesRaw.filter(
+            (a) => a.dept_id == null || a.dept_id === employee.dept_id
+          )
+        : empAttendancesRaw;
+
+    if (empAttendances.length === 0) {
+      errors.push({
+        emp_id: employee.emp_id,
+        name: employee.name,
+        error: "No attendance data for selected month in employee's department",
+      });
+      continue;
+    }
+
+    // Aggregate attendance (using round_off when present for salary proration)
     const aggregated = aggregateAttendance(empAttendances);
 
     // Validate attendance data
@@ -512,11 +543,12 @@ export function generatePayroll(
     }
 
     // Mid-month increment: 2+ segments → segment-based calculation
+    const foodOverride = foodOverrides.get(employee.emp_id);
     const segments = segmentsMap.get(employee.emp_id);
     const payroll =
       segments && segments.length >= 2
-        ? calculateEmployeePayrollWithSegments(employee, segments, aggregated, month)
-        : calculateEmployeePayroll(employee, aggregated, month);
+        ? calculateEmployeePayrollWithSegments(employee, segments, aggregated, month, foodOverride)
+        : calculateEmployeePayroll(employee, aggregated, month, foodOverride);
     payrolls.push(payroll);
   }
 
