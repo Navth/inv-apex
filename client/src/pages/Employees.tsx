@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, TrendingUp, CalendarIcon } from "lucide-react";
+import { Plus, TrendingUp, CalendarIcon, Upload } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -14,6 +14,8 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { parseEmployeeFile } from "@/lib/employeeParser";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as DayPickerCalendar } from "@/components/ui/calendar";
 import { employeesApi } from "@/api/employees";
@@ -65,6 +67,11 @@ export default function Employees() {
     notes: "",
   });
   const [incrementSubmitting, setIncrementSubmitting] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [parsedEmployees, setParsedEmployees] = useState<Array<{ emp_id: string; name: string; designation: string; department: string }>>([]);
+  const [uploadPayload, setUploadPayload] = useState<Array<Record<string, unknown>>>([]);
+  const [uploadErrors, setUploadErrors] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
 
   async function loadEmployees() {
     try {
@@ -282,6 +289,78 @@ export default function Employees() {
           Add Employee
         </Button>
       </div>
+
+      {/* Bulk upload from CSV/Excel */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Upload className="h-4 w-4" />
+            Upload from CSV / Excel
+          </CardTitle>
+          <CardDescription>
+            Add many employees at once. Required columns: Employee ID, Name, Designation, Department, DOJ (date of joining), Basic Salary. Optional: Category, Civil ID, Other Allowance, Food Allowance, Working Hours, Indemnity Rate. Header names can vary (e.g. Emp ID, emp_id, DOJ, Basic Salary).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <Input
+              type="file"
+              accept=".csv,.xlsx,.xls"
+              className="max-w-xs"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setUploadFile(file);
+                setUploadErrors([]);
+                setParsedEmployees([]);
+                setUploadPayload([]);
+                try {
+                  const { records, errors } = await parseEmployeeFile(file);
+                  setUploadErrors(errors);
+                  setParsedEmployees(records.map((r) => ({ emp_id: r.emp_id, name: r.name, designation: r.designation, department: r.department })));
+                  setUploadPayload(records as Array<Record<string, unknown>>);
+                } catch (err) {
+                  setUploadErrors([(err as Error).message]);
+                }
+              }}
+            />
+            {uploadFile && <span className="text-sm text-muted-foreground">{uploadFile.name}</span>}
+          </div>
+          {uploadErrors.length > 0 && (
+            <div className="rounded-md bg-destructive/10 text-destructive text-sm p-2">
+              {uploadErrors.slice(0, 8).map((msg, i) => <div key={i}>{msg}</div>)}
+              {uploadErrors.length > 8 && <div>... and {uploadErrors.length - 8} more</div>}
+            </div>
+          )}
+          {parsedEmployees.length > 0 && (
+            <>
+              <p className="text-sm font-medium">{parsedEmployees.length} employee(s) ready to add.</p>
+              <Button
+                disabled={uploading}
+                onClick={async () => {
+                  if (!uploadPayload.length) return;
+                  setUploading(true);
+                  try {
+                    const res = await employeesApi.bulkCreate(uploadPayload as any);
+                    alert(`Added ${res.count} employee(s) successfully.`);
+                    setUploadFile(null);
+                    setParsedEmployees([]);
+                    setUploadPayload([]);
+                    setUploadErrors([]);
+                    loadEmployees();
+                  } catch (err) {
+                    alert((err as Error).message || "Failed to add employees.");
+                  } finally {
+                    setUploading(false);
+                  }
+                }}
+              >
+                {uploading ? "Adding..." : `Add ${parsedEmployees.length} employee(s)`}
+              </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       <EmployeeTable
         employees={employees}
