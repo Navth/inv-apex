@@ -146,7 +146,9 @@ export function aggregateAttendance(attendances: Attendance[]): AggregatedAttend
     .filter(v => v > 0);
   const roundedOffDays = roundOffValues.length > 0 ? Math.max(...roundOffValues) : 0;
   
-  const actualPresentDays = roundedOffDays > 0 ? roundedOffDays : presentDays;
+  let actualPresentDays = roundedOffDays > 0 ? roundedOffDays : presentDays;
+  // Cap at 26: salary calculation is always based on 26 working days/month (Kuwait). Prevents 78 glitch if round_off was missing.
+  actualPresentDays = Math.min(actualPresentDays, KUWAIT_WORKING_DAYS_PER_MONTH);
   
   const otHoursNormal = attendances.reduce((sum, att) => 
     sum + (parseFloat(att.ot_hours_normal || "0")), 0);

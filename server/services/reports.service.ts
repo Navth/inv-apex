@@ -110,14 +110,15 @@ function formatMonthDisplay(month: string): string {
  * Generate monthly report combining employee, attendance, payroll, and food money data
  * Format matches: emp id | Month | Accommodation | Project/place | Name | DESIGNATION | Salary | Worked Days | etc.
  */
-/** Aggregate attendances for an employee - use round_off when available (same logic as payroll) */
+/** Aggregate attendances for an employee - use round_off when available (same logic as payroll). Salary divisor is always 26. */
 function aggregateAttendanceForReport(attendances: Attendance[]): { worked_days: number; working_days: number; normal_ot: number; friday_ot: number; holiday_ot: number; dues_earned: number; comments: string } {
   if (attendances.length === 0) return { worked_days: 0, working_days: 0, normal_ot: 0, friday_ot: 0, holiday_ot: 0, dues_earned: 0, comments: "" };
   const roundOffValues = attendances.map(a => a.round_off ? parseFloat(a.round_off.toString()) : 0).filter(v => v > 0);
   const roundedOff = roundOffValues.length > 0 ? Math.max(...roundOffValues) : 0;
   const presentSum = attendances.reduce((s, a) => s + (parseInt(a.present_days.toString()) || 0), 0);
-  const worked_days = roundedOff > 0 ? roundedOff : presentSum;
-  const working_days = Math.max(...attendances.map(a => parseInt(a.working_days.toString()) || 0));
+  let worked_days = roundedOff > 0 ? roundedOff : presentSum;
+  worked_days = Math.min(worked_days, KUWAIT_WORKING_DAYS_PER_MONTH); // Cap at 26 for salary; prevents 78 glitch
+  const working_days = Math.max(...attendances.map(a => parseInt(a.working_days.toString()) || 0)); // Expected days in month (e.g. 27)
   const normal_ot = attendances.reduce((s, a) => s + parseFloat(a.ot_hours_normal || "0"), 0);
   const friday_ot = attendances.reduce((s, a) => s + parseFloat(a.ot_hours_friday || "0"), 0);
   const holiday_ot = attendances.reduce((s, a) => s + parseFloat(a.ot_hours_holiday || "0"), 0);

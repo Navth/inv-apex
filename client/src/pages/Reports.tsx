@@ -202,12 +202,13 @@ export default function Reports() {
         <CardHeader>
           <CardTitle>Monthly Salary Sheet</CardTitle>
           <CardDescription>
-            Aggregated payroll and attendance for selected month. Salary is calculated using{" "}
-            <strong>round off</strong> from the attendance Excel when available (authoritative figure).
+            Aggregated payroll and attendance for selected month. Salary is always calculated using{" "}
+            <strong>26 working days per month</strong> (Kuwait standard); the figure used for pay is from{" "}
+            <strong>round off</strong> in the Excel when available.
             <br />
             <span className="text-muted-foreground text-sm mt-1 block">
-              <strong>Worked Days</strong> = Days used for salary (from round off or present days).{" "}
-              <strong>Working Days</strong> = Total expected days in the month (e.g. 26 or 27).
+              <strong>Worked Days</strong> = Days used for salary (from round off in Excel; capped at 26).{" "}
+              <strong>Working Days</strong> = Expected working days in the month from the sheet (e.g. 27).
             </span>
           </CardDescription>
         </CardHeader>
